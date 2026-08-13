@@ -116,3 +116,84 @@ fn test_read_item_with_completed_at() {
     let read_back = Storage::read_item(&data_dir, &item.id, &Location::Done).unwrap();
     assert!(read_back.completed_at.is_some());
 }
+
+#[test]
+fn test_move_item_backlog_to_active_today() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item = Item::new("Move me");
+    Storage::write_item(&data_dir, &item, &Location::Backlog).unwrap();
+
+    let moved = Storage::move_item(
+        &data_dir,
+        &item.id,
+        &Location::Backlog,
+        &Location::Active(Category::Today),
+    ).unwrap();
+
+    // Old file should be gone
+    let old_path = data_dir.join("backlog").join(format!("{}.md", item.id));
+    assert!(!old_path.exists());
+    // New file should exist
+    let new_path = data_dir.join("active/today").join(format!("{}.md", item.id));
+    assert!(new_path.exists());
+    // updated_at should be refreshed
+    assert!(moved.updated_at >= item.updated_at);
+}
+
+#[test]
+fn test_move_item_to_done_sets_completed_at() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item = Item::new("Complete me");
+    Storage::write_item(&data_dir, &item, &Location::Active(Category::Today)).unwrap();
+    assert!(item.completed_at.is_none());
+
+    let moved = Storage::move_item(
+        &data_dir,
+        &item.id,
+        &Location::Active(Category::Today),
+        &Location::Done,
+    ).unwrap();
+
+    assert!(moved.completed_at.is_some());
+}
+
+#[test]
+fn test_move_item_from_done_clears_completed_at() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let mut item = Item::new("Reopen me");
+    item.completed_at = Some(chrono::Utc::now());
+    Storage::write_item(&data_dir, &item, &Location::Done).unwrap();
+
+    let moved = Storage::move_item(
+        &data_dir,
+        &item.id,
+        &Location::Done,
+        &Location::Active(Category::Today),
+    ).unwrap();
+
+    assert!(moved.completed_at.is_none());
+}
+
+#[test]
+fn test_delete_item() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item = Item::new("Delete me");
+    Storage::write_item(&data_dir, &item, &Location::Backlog).unwrap();
+
+    Storage::delete_item(&data_dir, &item.id, &Location::Backlog).unwrap();
+
+    let path = data_dir.join("backlog").join(format!("{}.md", item.id));
+    assert!(!path.exists());
+}

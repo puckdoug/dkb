@@ -1,3 +1,4 @@
+use chrono::Utc;
 use std::path::{Path, PathBuf};
 
 use crate::item::{Category, Item, Status};
@@ -93,6 +94,61 @@ impl Storage {
             .join(format!("{}.md", id));
         let content = std::fs::read_to_string(file_path)?;
         Self::parse_item_from_content(id, content)
+    }
+
+    pub fn move_item(
+        data_dir: &Path,
+        id: &Uuid,
+        from: &Location,
+        to: &Location,
+    ) -> std::io::Result<Item> {
+        let from_path = data_dir
+            .join(from.to_path())
+            .join(format!("{}.md", id));
+        let to_dir = data_dir.join(to.to_path());
+        std::fs::create_dir_all(&to_dir)?;
+        let to_path = to_dir.join(format!("{}.md", id));
+
+        let content = std::fs::read_to_string(&from_path)?;
+        let (frontmatter, body) = Item::parse_frontmatter(&content)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "failed to parse frontmatter"))?;
+
+        let now = Utc::now();
+        let completed_at = match to.status() {
+            Status::Done => Some(now),
+            _ => {
+                if from.status() == Status::Done {
+                    None
+                } else {
+                    frontmatter.completed_at
+                }
+            }
+        };
+
+        let updated_item = Item {
+            id: *id,
+            body,
+            created_at: frontmatter.created_at.unwrap_or_default(),
+            updated_at: now,
+            completed_at,
+        };
+
+        std::fs::write(&to_path, updated_item.serialize())?;
+        std::fs::remove_file(from_path)?;
+
+        Ok(updated_item)
+    }
+
+    pub fn delete_item(
+        data_dir: &Path,
+        id: &Uuid,
+        location: &Location,
+    ) -> std::io::Result<()> {
+        let path = data_dir
+            .join(location.to_path())
+            .join(format!("{}.md", id));
+        std::fs::remove_file(path)?;
+        Ok(())
     }
 
     pub fn parse_item_from_content(id: &Uuid, content: String) -> std::io::Result<Item> {
