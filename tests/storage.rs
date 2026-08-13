@@ -1,4 +1,4 @@
-use dkb::item::{Status, Category};
+use dkb::item::{Category, Item, Status};
 use dkb::storage::{Location, Storage};
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -56,4 +56,63 @@ fn test_storage_init_idempotent() {
     let data_dir = tmp.path().to_path_buf();
     Storage::init(&data_dir).unwrap();
     Storage::init(&data_dir).unwrap();
+}
+
+#[test]
+fn test_write_item_creates_file() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item = Item::new("Test task");
+    Storage::write_item(&data_dir, &item, &Location::Backlog).unwrap();
+
+    let expected_path = data_dir.join("backlog").join(format!("{}.md", item.id));
+    assert!(expected_path.exists());
+}
+
+#[test]
+fn test_write_item_active_today() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item = Item::new("Today task");
+    Storage::write_item(&data_dir, &item, &Location::Active(Category::Today)).unwrap();
+
+    let expected_path = data_dir.join("active/today").join(format!("{}.md", item.id));
+    assert!(expected_path.exists());
+}
+
+#[test]
+fn test_read_item_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let mut item = Item::new("Round trip");
+    item.body = "Round trip\n\nBody text".to_string();
+    Storage::write_item(&data_dir, &item, &Location::Backlog).unwrap();
+
+    let read_back = Storage::read_item(&data_dir, &item.id, &Location::Backlog).unwrap();
+    assert_eq!(read_back.id, item.id);
+    assert_eq!(read_back.body, item.body);
+    assert_eq!(read_back.title(), item.title());
+    assert_eq!(read_back.created_at, item.created_at);
+    assert_eq!(read_back.updated_at, item.updated_at);
+    assert_eq!(read_back.completed_at, item.completed_at);
+}
+
+#[test]
+fn test_read_item_with_completed_at() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let mut item = Item::new("Done task");
+    item.completed_at = Some(chrono::Utc::now());
+    Storage::write_item(&data_dir, &item, &Location::Done).unwrap();
+
+    let read_back = Storage::read_item(&data_dir, &item.id, &Location::Done).unwrap();
+    assert!(read_back.completed_at.is_some());
 }

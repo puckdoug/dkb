@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::item::{Category, Status};
+use crate::item::{Category, Item, Status};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Location {
@@ -68,5 +69,41 @@ impl Storage {
             std::fs::create_dir_all(data_dir.join(dir))?;
         }
         Ok(())
+    }
+
+    pub fn write_item(
+        data_dir: &Path,
+        item: &Item,
+        location: &Location,
+    ) -> std::io::Result<()> {
+        let dir = data_dir.join(location.to_path());
+        std::fs::create_dir_all(&dir)?;
+        let file_path = dir.join(format!("{}.md", item.id));
+        std::fs::write(file_path, item.serialize())?;
+        Ok(())
+    }
+
+    pub fn read_item(
+        data_dir: &Path,
+        id: &Uuid,
+        location: &Location,
+    ) -> std::io::Result<Item> {
+        let file_path = data_dir
+            .join(location.to_path())
+            .join(format!("{}.md", id));
+        let content = std::fs::read_to_string(file_path)?;
+        Self::parse_item_from_content(id, content)
+    }
+
+    pub fn parse_item_from_content(id: &Uuid, content: String) -> std::io::Result<Item> {
+        let (frontmatter, body) = Item::parse_frontmatter(&content)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "failed to parse frontmatter"))?;
+        Ok(Item {
+            id: *id,
+            body,
+            created_at: frontmatter.created_at.unwrap_or_default(),
+            updated_at: frontmatter.updated_at.unwrap_or_default(),
+            completed_at: frontmatter.completed_at,
+        })
     }
 }
