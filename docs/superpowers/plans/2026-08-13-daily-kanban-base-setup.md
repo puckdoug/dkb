@@ -54,7 +54,7 @@
 **Interfaces:**
 - Produces: a compilable crate with GPUI dependencies, empty `lib.rs`, and a minimal `main` that opens a blank GPUI window
 
-- [ ] **Step 1: Update Cargo.toml with all dependencies**
+- [x] **Step 1: Update Cargo.toml with all dependencies**
 
 Replace the entire contents of `Cargo.toml` with:
 
@@ -81,7 +81,7 @@ name = "dkb"
 path = "src/bin/dkb.rs"
 ```
 
-- [ ] **Step 2: Create src/lib.rs with module declarations**
+- [x] **Step 2: Create src/lib.rs with module declarations**
 
 Create `src/lib.rs`:
 
@@ -93,7 +93,7 @@ pub mod item;
 pub mod storage;
 ```
 
-- [ ] **Step 3: Create stub modules so the crate compiles**
+- [x] **Step 3: Create stub modules so the crate compiles**
 
 Create each of these files with empty content (just a comment):
 
@@ -122,7 +122,7 @@ Create each of these files with empty content (just a comment):
 // Filesystem storage — implemented in later tasks
 ```
 
-- [ ] **Step 4: Create src/bin/dkb.rs with minimal GPUI window**
+- [x] **Step 4: Create src/bin/dkb.rs with minimal GPUI window**
 
 Create `src/bin/dkb.rs`:
 
@@ -156,7 +156,7 @@ fn main() {
 }
 ```
 
-- [ ] **Step 5: Add minimal KanbanView to app.rs so it compiles**
+- [x] **Step 5: Add minimal KanbanView to app.rs so it compiles**
 
 Replace `src/app.rs` with:
 
@@ -193,18 +193,18 @@ impl Render for KanbanView {
 }
 ```
 
-- [ ] **Step 6: Delete src/main.rs**
+- [x] **Step 6: Delete src/main.rs**
 
 ```bash
 rm src/main.rs
 ```
 
-- [ ] **Step 7: Verify the crate builds**
+- [x] **Step 7: Verify the crate builds**
 
 Run: `cargo build`
 Expected: compiles successfully (may take a while fetching GPUI from git)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A && git commit -m "feat: scaffold project with GPUI dependencies and blank window"
@@ -221,7 +221,7 @@ git add -A && git commit -m "feat: scaffold project with GPUI dependencies and b
 **Interfaces:**
 - Produces: `Item` struct, `Status` enum, `Category` enum, `Item::new(title)`, `Item::title()`, `Item::extract_title(body)`, `Item::parse_frontmatter(content)`, `Item::serialize(&self)`, `ItemFrontmatter` struct (serde)
 
-- [ ] **Step 1: Write the failing test for Item creation and title extraction**
+- [x] **Step 1: Write the failing test for Item creation and title extraction**
 
 Create `tests/item.rs`:
 
@@ -272,12 +272,12 @@ fn test_category_variants() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test --test item`
 Expected: FAIL — `item` module has no public types
 
-- [ ] **Step 3: Implement the Item struct, enums, and basic methods**
+- [x] **Step 3: Implement the Item struct, enums, and basic methods**
 
 Replace `src/item.rs` with:
 
@@ -335,12 +335,12 @@ impl Item {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cargo test --test item`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/item.rs tests/item.rs && git commit -m "feat: add Item struct, Status/Category enums, title extraction"
@@ -357,7 +357,7 @@ git add src/item.rs tests/item.rs && git commit -m "feat: add Item struct, Statu
 **Interfaces:**
 - Produces: `ItemFrontmatter` struct, `Item::serialize(&self) -> String`, `Item::parse_frontmatter(content) -> (ItemFrontmatter, String)`
 
-- [ ] **Step 1: Write the failing tests for frontmatter round-trip**
+- [x] **Step 1: Write the failing tests for frontmatter round-trip**
 
 Append to `tests/item.rs`:
 
@@ -414,12 +414,12 @@ fn test_parse_frontmatter_no_frontmatter() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test item`
 Expected: FAIL — `ItemFrontmatter`, `serialize`, `parse_frontmatter` do not exist
 
-- [ ] **Step 3: Implement frontmatter serialization and parsing**
+- [x] **Step 3: Implement frontmatter serialization and parsing**
 
 Add to `src/item.rs`:
 
@@ -476,12 +476,12 @@ impl Item {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test item`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/item.rs tests/item.rs && git commit -m "feat: add frontmatter serialization and parsing for Item"
@@ -499,7 +499,7 @@ git add src/item.rs tests/item.rs && git commit -m "feat: add frontmatter serial
 - Consumes: `Item` from Task 2, `ItemFrontmatter` from Task 3
 - Produces: `Location` enum with `to_path()`, `from_path()`, `status()`, `category()`; `Storage::init(data_dir)`
 
-- [ ] **Step 1: Write the failing test for Location and init**
+- [x] **Step 1: Write the failing test for Location and init**
 
 Create `tests/storage.rs`:
 
@@ -566,12 +566,12 @@ fn test_storage_init_idempotent() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test storage`
 Expected: FAIL — `Location`, `Storage` do not exist
 
-- [ ] **Step 3: Implement Location enum and Storage::init**
+- [x] **Step 3: Implement Location enum and Storage::init**
 
 Replace `src/storage.rs` with:
 
@@ -650,12 +650,12 @@ impl Storage {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test storage`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage.rs tests/storage.rs && git commit -m "feat: add Location enum and Storage::init for directory creation"
@@ -673,7 +673,7 @@ git add src/storage.rs tests/storage.rs && git commit -m "feat: add Location enu
 - Consumes: `Item`, `ItemFrontmatter`, `Location` from prior tasks
 - Produces: `Storage::write_item(data_dir, item, location)`, `Storage::parse_item(path) -> Item`, `Storage::read_item(data_dir, id, location) -> Item`
 
-- [ ] **Step 1: Write the failing tests for write and read**
+- [x] **Step 1: Write the failing tests for write and read**
 
 Append to `tests/storage.rs`:
 
@@ -740,12 +740,12 @@ fn test_read_item_with_completed_at() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test storage`
 Expected: FAIL — `write_item`, `read_item` do not exist
 
-- [ ] **Step 3: Implement write_item, parse_item, read_item**
+- [x] **Step 3: Implement write_item, parse_item, read_item**
 
 Add to `src/storage.rs` (inside `impl Storage`):
 
@@ -792,12 +792,12 @@ impl Storage {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test storage`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage.rs tests/storage.rs && git commit -m "feat: add Storage write_item and read_item for item persistence"
@@ -814,7 +814,7 @@ git add src/storage.rs tests/storage.rs && git commit -m "feat: add Storage writ
 **Interfaces:**
 - Produces: `Storage::move_item(data_dir, id, from, to) -> Item` (returns updated item with refreshed timestamps), `Storage::delete_item(data_dir, id, location)`
 
-- [ ] **Step 1: Write the failing tests for move and delete**
+- [x] **Step 1: Write the failing tests for move and delete**
 
 Append to `tests/storage.rs`:
 
@@ -901,12 +901,12 @@ fn test_delete_item() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test storage`
 Expected: FAIL — `move_item`, `delete_item` do not exist
 
-- [ ] **Step 3: Implement move_item and delete_item**
+- [x] **Step 3: Implement move_item and delete_item**
 
 Add to `src/storage.rs` (inside `impl Storage`):
 
@@ -974,12 +974,12 @@ impl Storage {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test storage`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage.rs tests/storage.rs && git commit -m "feat: add Storage move_item and delete_item with timestamp management"
@@ -998,7 +998,7 @@ git add src/storage.rs tests/storage.rs && git commit -m "feat: add Storage move
 - Consumes: `Item`, `Location`, all storage methods from prior tasks
 - Produces: `Board` struct, `ActiveColumns` struct, `Storage::load_board(data_dir) -> Board`
 
-- [ ] **Step 1: Write the failing tests for load_board**
+- [x] **Step 1: Write the failing tests for load_board**
 
 Append to `tests/storage.rs`:
 
@@ -1066,12 +1066,12 @@ fn test_load_board_done_sorted_by_completed_at_desc() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test storage`
 Expected: FAIL — `Board`, `load_board` do not exist
 
-- [ ] **Step 3: Implement Board struct and load_board**
+- [x] **Step 3: Implement Board struct and load_board**
 
 Replace `src/board.rs` with:
 
@@ -1149,12 +1149,12 @@ impl Storage {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test storage`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage.rs src/board.rs tests/storage.rs && git commit -m "feat: add Board struct and Storage::load_board to scan items from disk"
@@ -1171,7 +1171,7 @@ git add src/storage.rs src/board.rs tests/storage.rs && git commit -m "feat: add
 **Interfaces:**
 - Produces: `Config` struct with `data_dir: PathBuf`, `Config::load() -> Config`, `Config::default_data_dir() -> PathBuf`, `Config::config_file_path() -> PathBuf`
 
-- [ ] **Step 1: Write the failing tests for config**
+- [x] **Step 1: Write the failing tests for config**
 
 Create `tests/config.rs`:
 
@@ -1225,12 +1225,12 @@ fn test_config_expands_tilde() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test config`
 Expected: FAIL — `Config` does not exist
 
-- [ ] **Step 3: Implement Config**
+- [x] **Step 3: Implement Config**
 
 Replace `src/config.rs` with:
 
@@ -1302,12 +1302,12 @@ impl Config {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test config`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.rs tests/config.rs && git commit -m "feat: add Config layer with TOML loading and tilde expansion"
@@ -1325,7 +1325,7 @@ git add src/config.rs tests/config.rs && git commit -m "feat: add Config layer w
 - Consumes: `Board`, `Item`, `Location`, `Status`, `Category` from prior tasks
 - Produces: `Board::find_item(&self, id) -> Option<&Item>`, `Board::find_item_location(&self, id) -> Option<Location>`, `Board::can_move(id, to_location) -> bool`, `Board::move_item(&mut self, id, to_location) -> Option<(Location, Location)>` (returns from/to locations so the caller can do the filesystem move)
 
-- [ ] **Step 1: Write the failing tests for board transitions**
+- [x] **Step 1: Write the failing tests for board transitions**
 
 Create `tests/board.rs`:
 
@@ -1442,12 +1442,12 @@ fn test_move_item_from_done_clears_completed_at() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test board`
 Expected: FAIL — `find_item`, `find_item_location`, `can_move`, `move_item` do not exist
 
-- [ ] **Step 3: Implement board transition methods**
+- [x] **Step 3: Implement board transition methods**
 
 Add to `src/board.rs`:
 
@@ -1571,17 +1571,17 @@ impl Board {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test board`
 Expected: PASS
 
-- [ ] **Step 5: Run all tests to verify nothing broke**
+- [x] **Step 5: Run all tests to verify nothing broke**
 
 Run: `cargo test`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/board.rs tests/board.rs && git commit -m "feat: add Board lifecycle transitions with state machine validation"

@@ -1,4 +1,4 @@
-use gpui::{App, WindowOptions, div, prelude::*, px, rgb, size};
+use gpui::{App, WindowOptions, prelude::*, px, size};
 use gpui_platform::application;
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
         };
 
         cx.open_window(opts, |_, cx| {
-            cx.new(|_cx| dkb::app::KanbanView::new(_cx))
+            cx.new(dkb::app::KanbanView::new)
         })
         .unwrap();
     });

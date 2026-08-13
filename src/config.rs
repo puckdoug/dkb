@@ -55,11 +55,10 @@ impl Config {
     }
 
     fn expand_tilde(path: &str) -> PathBuf {
-        if let Some(rest) = path.strip_prefix("~/") {
-            if let Some(home) = std::env::var_os("HOME") {
+        if let Some(rest) = path.strip_prefix("~/")
+            && let Some(home) = std::env::var_os("HOME") {
                 return PathBuf::from(home).join(rest);
             }
-        }
         PathBuf::from(path)
     }
 }

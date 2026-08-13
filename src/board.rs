@@ -100,7 +100,7 @@ impl Board {
         };
 
         self.insert_item(item, to);
-        Some((from, to.clone()))
+        Some((from, *to))
     }
 
     pub fn remove_item(&mut self, id: &Uuid, location: &Location) -> Option<Item> {
