@@ -1,6 +1,7 @@
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 
+use crate::board::Board;
 use crate::item::{Category, Item, Status};
 use uuid::Uuid;
 
@@ -161,5 +162,51 @@ impl Storage {
             updated_at: frontmatter.updated_at.unwrap_or_default(),
             completed_at: frontmatter.completed_at,
         })
+    }
+
+    pub fn load_board(data_dir: &Path) -> std::io::Result<Board> {
+        let mut board = Board::default();
+
+        let locations: [(Location, fn(&mut Board, Vec<Item>)); 6] = [
+            (Location::Backlog, |b, items| b.backlog = items),
+            (Location::Active(Category::Yesterday), |b, items| b.active.yesterday = items),
+            (Location::Active(Category::Today), |b, items| b.active.today = items),
+            (Location::Active(Category::ThisWeek), |b, items| b.active.this_week = items),
+            (Location::Active(Category::NextWeek), |b, items| b.active.next_week = items),
+            (Location::Done, |b, items| b.done = items),
+        ];
+
+        for (location, setter) in locations {
+            let dir = data_dir.join(location.to_path());
+            if !dir.exists() {
+                continue;
+            }
+            let mut items: Vec<Item> = Vec::new();
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                    continue;
+                }
+                let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                let Ok(id) = Uuid::parse_str(file_stem) else {
+                    continue;
+                };
+                let content = std::fs::read_to_string(&path)?;
+                match Self::parse_item_from_content(&id, content) {
+                    Ok(item) => items.push(item),
+                    Err(_) => continue,
+                }
+            }
+            setter(&mut board, items);
+        }
+
+        board.done.sort_by(|a, b| {
+            b.completed_at
+                .unwrap_or_default()
+                .cmp(&a.completed_at.unwrap_or_default())
+        });
+
+        Ok(board)
     }
 }

@@ -197,3 +197,63 @@ fn test_delete_item() {
     let path = data_dir.join("backlog").join(format!("{}.md", item.id));
     assert!(!path.exists());
 }
+
+#[test]
+fn test_load_board_empty() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let board = Storage::load_board(&data_dir).unwrap();
+    assert!(board.backlog.is_empty());
+    assert!(board.active.yesterday.is_empty());
+    assert!(board.active.today.is_empty());
+    assert!(board.active.this_week.is_empty());
+    assert!(board.active.next_week.is_empty());
+    assert!(board.done.is_empty());
+}
+
+#[test]
+fn test_load_board_with_items() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let item1 = Item::new("Backlog item");
+    Storage::write_item(&data_dir, &item1, &Location::Backlog).unwrap();
+
+    let item2 = Item::new("Today item");
+    Storage::write_item(&data_dir, &item2, &Location::Active(Category::Today)).unwrap();
+
+    let mut item3 = Item::new("Done item");
+    item3.completed_at = Some(chrono::Utc::now());
+    Storage::write_item(&data_dir, &item3, &Location::Done).unwrap();
+
+    let board = Storage::load_board(&data_dir).unwrap();
+    assert_eq!(board.backlog.len(), 1);
+    assert_eq!(board.backlog[0].title(), "Backlog item");
+    assert_eq!(board.active.today.len(), 1);
+    assert_eq!(board.active.today[0].title(), "Today item");
+    assert_eq!(board.done.len(), 1);
+    assert!(board.done[0].completed_at.is_some());
+}
+
+#[test]
+fn test_load_board_done_sorted_by_completed_at_desc() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    Storage::init(&data_dir).unwrap();
+
+    let mut older = Item::new("Older done");
+    older.completed_at = Some(chrono::Utc::now() - chrono::Duration::hours(2));
+    Storage::write_item(&data_dir, &older, &Location::Done).unwrap();
+
+    let mut newer = Item::new("Newer done");
+    newer.completed_at = Some(chrono::Utc::now());
+    Storage::write_item(&data_dir, &newer, &Location::Done).unwrap();
+
+    let board = Storage::load_board(&data_dir).unwrap();
+    assert_eq!(board.done.len(), 2);
+    assert_eq!(board.done[0].title(), "Newer done");
+    assert_eq!(board.done[1].title(), "Older done");
+}
