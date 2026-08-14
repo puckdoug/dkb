@@ -167,16 +167,16 @@ impl Storage {
     pub fn load_board(data_dir: &Path) -> std::io::Result<Board> {
         let mut board = Board::default();
 
-        let locations: [(Location, fn(&mut Board, Vec<Item>)); 6] = [
-            (Location::Backlog, |b, items| b.backlog = items),
-            (Location::Active(Category::Yesterday), |b, items| b.active.yesterday = items),
-            (Location::Active(Category::Today), |b, items| b.active.today = items),
-            (Location::Active(Category::ThisWeek), |b, items| b.active.this_week = items),
-            (Location::Active(Category::NextWeek), |b, items| b.active.next_week = items),
-            (Location::Done, |b, items| b.done = items),
+        let locations = [
+            Location::Backlog,
+            Location::Active(Category::Yesterday),
+            Location::Active(Category::Today),
+            Location::Active(Category::ThisWeek),
+            Location::Active(Category::NextWeek),
+            Location::Done,
         ];
 
-        for (location, setter) in locations {
+        for location in locations {
             let dir = data_dir.join(location.to_path());
             if !dir.exists() {
                 continue;
@@ -198,7 +198,14 @@ impl Storage {
                     Err(_) => continue,
                 }
             }
-            setter(&mut board, items);
+            match location {
+                Location::Backlog => board.backlog = items,
+                Location::Active(Category::Yesterday) => board.active.yesterday = items,
+                Location::Active(Category::Today) => board.active.today = items,
+                Location::Active(Category::ThisWeek) => board.active.this_week = items,
+                Location::Active(Category::NextWeek) => board.active.next_week = items,
+                Location::Done => board.done = items,
+            }
         }
 
         board.done.sort_by(|a, b| {

@@ -326,6 +326,7 @@ impl KanbanView {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn commit_quick_add(&mut self, title: &str, cx: &mut Context<Self>) {
         let title = title.trim();
         if title.is_empty() {
