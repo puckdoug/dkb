@@ -1,4 +1,4 @@
-use dkb::config::Config;
+use dkb::config::{Config, ThemeMode};
 use tempfile::TempDir;
 
 #[test]
@@ -41,4 +41,29 @@ fn test_config_expands_tilde() {
     let config = Config::load_from(&config_path).unwrap();
     assert!(!config.data_dir.to_string_lossy().contains("~"));
     assert!(config.data_dir.to_string_lossy().contains("dkb-data"));
+}
+
+#[test]
+fn test_config_defaults_and_serialization() {
+    let temp = TempDir::new().unwrap();
+    let config_path = temp.path().join("config.toml");
+
+    let config = Config::load_from(&config_path).unwrap();
+    assert!(!config.vi_mode);
+    assert!(!config.line_numbers);
+    assert_eq!(config.theme_mode, ThemeMode::System);
+
+    let updated = Config {
+        data_dir: temp.path().join("custom_data"),
+        vi_mode: true,
+        line_numbers: true,
+        theme_mode: ThemeMode::Dark,
+    };
+    updated.save_to(&config_path).unwrap();
+
+    let reloaded = Config::load_from(&config_path).unwrap();
+    assert!(reloaded.vi_mode);
+    assert!(reloaded.line_numbers);
+    assert_eq!(reloaded.theme_mode, ThemeMode::Dark);
+    assert_eq!(reloaded.data_dir, temp.path().join("custom_data"));
 }

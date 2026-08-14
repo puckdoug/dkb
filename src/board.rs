@@ -1,7 +1,15 @@
 use crate::item::{Category, Item, Status};
 use crate::storage::Location;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct BoardState {
+    pub version: u32,
+    pub order: HashMap<String, Vec<Uuid>>,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ActiveColumns {
@@ -19,6 +27,60 @@ pub struct Board {
 }
 
 impl Board {
+    pub fn set_column_order(&mut self, location: &Location, ordered_ids: Vec<Uuid>) {
+        let items_vec = match location {
+            Location::Backlog => &mut self.backlog,
+            Location::Active(Category::Yesterday) => &mut self.active.yesterday,
+            Location::Active(Category::Today) => &mut self.active.today,
+            Location::Active(Category::ThisWeek) => &mut self.active.this_week,
+            Location::Active(Category::NextWeek) => &mut self.active.next_week,
+            Location::Done => &mut self.done,
+        };
+
+        let mut map: HashMap<Uuid, Item> = items_vec.drain(..).map(|i| (i.id, i)).collect();
+        for id in &ordered_ids {
+            if let Some(item) = map.remove(id) {
+                items_vec.push(item);
+            }
+        }
+        for (_, remaining_item) in map {
+            items_vec.push(remaining_item);
+        }
+    }
+
+    pub fn to_board_state(&self) -> BoardState {
+        let mut order = HashMap::new();
+        order.insert(
+            Location::Backlog.to_path().to_string_lossy().to_string(),
+            self.backlog.iter().map(|i| i.id).collect(),
+        );
+        order.insert(
+            Location::Active(Category::Yesterday).to_path().to_string_lossy().to_string(),
+            self.active.yesterday.iter().map(|i| i.id).collect(),
+        );
+        order.insert(
+            Location::Active(Category::Today).to_path().to_string_lossy().to_string(),
+            self.active.today.iter().map(|i| i.id).collect(),
+        );
+        order.insert(
+            Location::Active(Category::ThisWeek).to_path().to_string_lossy().to_string(),
+            self.active.this_week.iter().map(|i| i.id).collect(),
+        );
+        order.insert(
+            Location::Active(Category::NextWeek).to_path().to_string_lossy().to_string(),
+            self.active.next_week.iter().map(|i| i.id).collect(),
+        );
+        order.insert(
+            Location::Done.to_path().to_string_lossy().to_string(),
+            self.done.iter().map(|i| i.id).collect(),
+        );
+
+        BoardState {
+            version: 1,
+            order,
+        }
+    }
+
     pub fn find_item(&self, id: &Uuid) -> Option<&Item> {
         self.backlog
             .iter()

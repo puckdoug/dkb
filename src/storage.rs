@@ -1,7 +1,7 @@
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 
-use crate::board::Board;
+use crate::board::{Board, BoardState};
 use crate::item::{Category, Item, Status};
 use uuid::Uuid;
 
@@ -164,6 +164,15 @@ impl Storage {
         })
     }
 
+    pub fn save_board_state(data_dir: &Path, board: &Board) -> std::io::Result<()> {
+        let state = board.to_board_state();
+        let state_path = data_dir.join("board_state.json");
+        let content = serde_json::to_string_pretty(&state)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(state_path, content)?;
+        Ok(())
+    }
+
     pub fn load_board(data_dir: &Path) -> std::io::Result<Board> {
         let mut board = Board::default();
 
@@ -213,6 +222,18 @@ impl Storage {
                 .unwrap_or_default()
                 .cmp(&a.completed_at.unwrap_or_default())
         });
+
+        let state_path = data_dir.join("board_state.json");
+        if let Ok(content) = std::fs::read_to_string(state_path)
+            && let Ok(state) = serde_json::from_str::<BoardState>(&content)
+        {
+            for location in locations {
+                let key = location.to_path().to_string_lossy().to_string();
+                if let Some(ordered_ids) = state.order.get(&key) {
+                    board.set_column_order(&location, ordered_ids.clone());
+                }
+            }
+        }
 
         Ok(board)
     }

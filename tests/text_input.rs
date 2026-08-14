@@ -290,3 +290,17 @@ fn test_select_word_at() {
     state.select_word_at(3);
     assert_eq!(state.selected_range(), 0..5);
 }
+
+#[test]
+fn test_multiline_up_down_navigation() {
+    let mut state = TextInputState::new("line one\nline two\nline three");
+    state.move_to(2); // 'n' in "line one"
+    state.move_down();
+    assert_eq!(state.cursor_offset(), 11); // 'n' in "line two"
+    state.move_down();
+    assert_eq!(state.cursor_offset(), 20); // 'n' in "line three"
+    state.move_up();
+    assert_eq!(state.cursor_offset(), 11);
+    state.move_up();
+    assert_eq!(state.cursor_offset(), 2);
+}

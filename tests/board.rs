@@ -108,3 +108,28 @@ fn test_move_item_from_done_clears_completed_at() {
     let reopened = board.active.today.iter().find(|i| i.id == id).unwrap();
     assert!(reopened.completed_at.is_none());
 }
+
+#[test]
+fn test_board_absolute_order_persistence() {
+    let temp = TempDir::new().unwrap();
+    Storage::init(temp.path()).unwrap();
+
+    let item1 = Item::new("Item 1");
+    let item2 = Item::new("Item 2");
+    let item3 = Item::new("Item 3");
+
+    Storage::write_item(temp.path(), &item1, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(temp.path(), &item2, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(temp.path(), &item3, &Location::Active(Category::Today)).unwrap();
+
+    let mut board = Storage::load_board(temp.path()).unwrap();
+
+    // Explicit reorder: item3, item1, item2
+    board.set_column_order(&Location::Active(Category::Today), vec![item3.id, item1.id, item2.id]);
+    Storage::save_board_state(temp.path(), &board).unwrap();
+
+    let loaded_board = Storage::load_board(temp.path()).unwrap();
+    let today_ids: Vec<_> = loaded_board.active.today.iter().map(|i| i.id).collect();
+    assert_eq!(today_ids, vec![item3.id, item1.id, item2.id]);
+}
+

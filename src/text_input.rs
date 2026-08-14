@@ -67,6 +67,71 @@ impl TextInputState {
         }
     }
 
+    pub fn find_line_start(&self, offset: usize) -> usize {
+        let offset = offset.min(self.content.len());
+        self.content[..offset]
+            .rfind('\n')
+            .map(|idx| idx + 1)
+            .unwrap_or(0)
+    }
+
+    pub fn find_line_end(&self, offset: usize) -> usize {
+        let offset = offset.min(self.content.len());
+        self.content[offset..]
+            .find('\n')
+            .map(|idx| offset + idx)
+            .unwrap_or(self.content.len())
+    }
+
+    pub fn find_line_up(&self, offset: usize) -> usize {
+        let line_start = self.find_line_start(offset);
+        if line_start == 0 {
+            return 0;
+        }
+        let col = offset - line_start;
+        let prev_line_end = line_start - 1;
+        let prev_line_start = self.find_line_start(prev_line_end);
+        let prev_line_len = prev_line_end - prev_line_start;
+        prev_line_start + col.min(prev_line_len)
+    }
+
+    pub fn find_line_down(&self, offset: usize) -> usize {
+        let line_start = self.find_line_start(offset);
+        let col = offset - line_start;
+        let line_end = self.find_line_end(offset);
+        if line_end >= self.content.len() {
+            return self.content.len();
+        }
+        let next_line_start = line_end + 1;
+        let next_line_end = self.find_line_end(next_line_start);
+        let next_line_len = next_line_end - next_line_start;
+        next_line_start + col.min(next_line_len)
+    }
+
+    pub fn move_up(&mut self) {
+        let cur = self.cursor_offset();
+        let target = self.find_line_up(cur);
+        self.move_to(target);
+    }
+
+    pub fn move_down(&mut self) {
+        let cur = self.cursor_offset();
+        let target = self.find_line_down(cur);
+        self.move_to(target);
+    }
+
+    pub fn select_up(&mut self) {
+        let cur = self.cursor_offset();
+        let target = self.find_line_up(cur);
+        self.select_to(target);
+    }
+
+    pub fn select_down(&mut self) {
+        let cur = self.cursor_offset();
+        let target = self.find_line_down(cur);
+        self.select_to(target);
+    }
+
     pub fn move_to_home(&mut self) {
         self.move_to(0);
     }

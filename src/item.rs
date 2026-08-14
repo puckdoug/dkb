@@ -42,11 +42,52 @@ impl Item {
         Self::extract_title(&self.body)
     }
 
+    pub fn clean_title(raw: &str) -> String {
+        let trimmed = raw.trim();
+        let without_header = trimmed.trim_start_matches('#').trim();
+
+        let mut result = String::new();
+        let mut chars = without_header.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                '*' | '_' | '`' | '~' => {
+                    // Skip markdown styling markers
+                    continue;
+                }
+                '[' => {
+                    // Extract link text before ']' and skip '(url)'
+                    let mut link_text = String::new();
+                    while let Some(&next_ch) = chars.peek() {
+                        chars.next();
+                        if next_ch == ']' {
+                            break;
+                        }
+                        link_text.push(next_ch);
+                    }
+                    if let Some(&'(') = chars.peek() {
+                        chars.next();
+                        for next_ch in chars.by_ref() {
+                            if next_ch == ')' {
+                                break;
+                            }
+                        }
+                    }
+                    result.push_str(&Self::clean_title(&link_text));
+                }
+                _ => result.push(ch),
+            }
+        }
+
+        result.trim().to_string()
+    }
+
     pub fn extract_title(body: &str) -> String {
-        body.lines()
+        let first_line = body
+            .lines()
             .find(|line| !line.trim().is_empty())
-            .unwrap_or("")
-            .to_string()
+            .unwrap_or("");
+        Self::clean_title(first_line)
     }
 
     pub fn serialize(&self) -> String {

@@ -1,8 +1,24 @@
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    Light,
+    Dark,
+    #[default]
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub data_dir: PathBuf,
+    #[serde(default)]
+    pub vi_mode: bool,
+    #[serde(default)]
+    pub line_numbers: bool,
+    #[serde(default)]
+    pub theme_mode: ThemeMode,
 }
 
 impl Config {
@@ -24,34 +40,37 @@ impl Config {
 
     pub fn load_from(config_path: &Path) -> std::io::Result<Self> {
         if !config_path.exists() {
-            let default_dir = Self::default_data_dir();
-            std::fs::create_dir_all(config_path.parent().unwrap_or(Path::new(".")))?;
-            let content = format!("data_dir = \"{}\"\n", default_dir.display());
-            std::fs::write(config_path, content)?;
-            return Ok(Self { data_dir: default_dir });
+            let default_config = Self {
+                data_dir: Self::default_data_dir(),
+                vi_mode: false,
+                line_numbers: false,
+                theme_mode: ThemeMode::System,
+            };
+            default_config.save_to(config_path)?;
+            return Ok(default_config);
         }
 
         let content = std::fs::read_to_string(config_path)?;
-        let data_dir_str = content
-            .lines()
-            .find_map(|line| {
-                let line = line.trim();
-                line.strip_prefix("data_dir")
-                    .map(|s| s.trim_start())
-                    .and_then(|s| s.strip_prefix('='))
-                    .map(|s| s.trim())
-                    .and_then(|s| {
-                        s.trim_matches('"')
-                            .trim_matches('\'')
-                            .to_string()
-                            .into()
-                    })
-            })
-            .unwrap_or_else(|| Self::default_data_dir().to_string_lossy().to_string());
+        let mut config: Config = toml::from_str(&content)
+            .unwrap_or_else(|_| Config {
+                data_dir: Self::default_data_dir(),
+                vi_mode: false,
+                line_numbers: false,
+                theme_mode: ThemeMode::System,
+            });
+        
+        config.data_dir = Self::expand_tilde(&config.data_dir.to_string_lossy());
+        Ok(config)
+    }
 
-        let data_dir = Self::expand_tilde(&data_dir_str);
-
-        Ok(Self { data_dir })
+    pub fn save_to(&self, config_path: &Path) -> std::io::Result<()> {
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(config_path, content)?;
+        Ok(())
     }
 
     fn expand_tilde(path: &str) -> PathBuf {
