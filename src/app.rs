@@ -41,6 +41,7 @@ pub struct KanbanView {
     pub config: Config,
     pub focus_handle: FocusHandle,
     pub selected_item: Option<Uuid>,
+    pub quick_add_active: bool,
 }
 
 impl KanbanView {
@@ -57,6 +58,7 @@ impl KanbanView {
             config,
             focus_handle: cx.focus_handle(),
             selected_item: None,
+            quick_add_active: false,
         }
     }
 
@@ -140,6 +142,7 @@ impl Render for KanbanView {
             .on_action(cx.listener(Self::on_move_to_backlog))
             .on_action(cx.listener(Self::on_toggle_done))
             .on_action(cx.listener(Self::on_delete_item))
+            .on_action(cx.listener(Self::on_new_item))
             .child(
                 div()
                     .flex()
@@ -256,6 +259,31 @@ impl KanbanView {
         }
     }
 
+    fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
+        self.quick_add_active = true;
+        cx.notify();
+    }
+
+    fn commit_quick_add(&mut self, title: &str, cx: &mut Context<Self>) {
+        let title = title.trim();
+        if title.is_empty() {
+            self.quick_add_active = false;
+            cx.notify();
+            return;
+        }
+        let item = Item::new(title);
+        let location = match self.current_screen {
+            Screen::Backlog => Location::Backlog,
+            Screen::Active => Location::Active(Category::Today),
+            Screen::Done => Location::Backlog,
+        };
+        if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
+            self.board.insert_item(item, &location);
+        }
+        self.quick_add_active = false;
+        cx.notify();
+    }
+
     fn render_tab(&self, label: &str, screen: Screen, cx: &mut Context<Self>) -> impl IntoElement {
         let is_active = self.current_screen == screen;
         div()
@@ -330,8 +358,9 @@ impl KanbanView {
                             .text_sm()
                             .text_color(rgb(0x37474f))
                             .child(title.to_string()),
-                    )
-                    .child(
+            )
+            .child(self.render_quick_add_bar(cx))
+            .child(
                         div()
                             .text_xs()
                             .text_color(rgb(0x78909c))
@@ -375,5 +404,35 @@ impl KanbanView {
             .flex_1()
             .p(px(8.))
             .child(self.render_column("Done", &self.board.done, cx))
+    }
+
+    fn render_quick_add_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.quick_add_active {
+            div()
+                .p(px(8.))
+                .bg(rgb(0xffffff))
+                .border_b_1()
+                .border_color(rgb(0xcccccc))
+                .child(
+                    div()
+                        .px(px(8.))
+                        .py(px(4.))
+                        .rounded(px(4.))
+                        .border_1()
+                        .border_color(rgb(0x2196f3))
+                        .text_sm()
+                        .text_color(rgb(0x999999))
+                        .on_mouse_down(
+                            gpui::MouseButton::Left,
+                            cx.listener(|this, _, _window, cx| {
+                                this.quick_add_active = false;
+                                cx.notify();
+                            }),
+                        )
+                        .child("Type item title, press Enter to create... (click to cancel)"),
+                )
+        } else {
+            div()
+        }
     }
 }
