@@ -5,8 +5,8 @@ use gpui::{
 
 use crate::board::Board;
 use crate::config::Config;
-use crate::item::Item;
-use crate::storage::Storage;
+use crate::item::{Category, Item, Status};
+use crate::storage::{Location, Storage};
 use uuid::Uuid;
 
 actions!(
@@ -133,6 +133,13 @@ impl Render for KanbanView {
             .on_action(cx.listener(Self::on_show_active))
             .on_action(cx.listener(Self::on_show_done))
             .on_action(cx.listener(Self::on_close_window))
+            .on_action(cx.listener(Self::on_move_to_yesterday))
+            .on_action(cx.listener(Self::on_move_to_today))
+            .on_action(cx.listener(Self::on_move_to_this_week))
+            .on_action(cx.listener(Self::on_move_to_next_week))
+            .on_action(cx.listener(Self::on_move_to_backlog))
+            .on_action(cx.listener(Self::on_toggle_done))
+            .on_action(cx.listener(Self::on_delete_item))
             .child(
                 div()
                     .flex()
@@ -176,6 +183,77 @@ impl KanbanView {
 
     fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Context<Self>) {
         window.remove_window();
+    }
+
+    fn move_selected_to(&mut self, location: Location, cx: &mut Context<Self>) {
+        let Some(id) = self.selected_item else {
+            return;
+        };
+        if !self.board.can_move(&id, &location) {
+            return;
+        }
+        let Some(from) = self.board.find_item_location(&id) else {
+            return;
+        };
+        match Storage::move_item(&self.config.data_dir, &id, &from, &location) {
+            Ok(updated_item) => {
+                let _ = self.board.remove_item(&id, &from);
+                self.board.insert_item(updated_item, &location);
+                cx.notify();
+            }
+            Err(e) => {
+                eprintln!("Failed to move item: {}", e);
+            }
+        }
+    }
+
+    fn on_move_to_yesterday(&mut self, _: &MoveToYesterday, _window: &mut Window, cx: &mut Context<Self>) {
+        self.move_selected_to(Location::Active(Category::Yesterday), cx);
+    }
+
+    fn on_move_to_today(&mut self, _: &MoveToToday, _window: &mut Window, cx: &mut Context<Self>) {
+        self.move_selected_to(Location::Active(Category::Today), cx);
+    }
+
+    fn on_move_to_this_week(&mut self, _: &MoveToThisWeek, _window: &mut Window, cx: &mut Context<Self>) {
+        self.move_selected_to(Location::Active(Category::ThisWeek), cx);
+    }
+
+    fn on_move_to_next_week(&mut self, _: &MoveToNextWeek, _window: &mut Window, cx: &mut Context<Self>) {
+        self.move_selected_to(Location::Active(Category::NextWeek), cx);
+    }
+
+    fn on_move_to_backlog(&mut self, _: &MoveToBacklog, _window: &mut Window, cx: &mut Context<Self>) {
+        self.move_selected_to(Location::Backlog, cx);
+    }
+
+    fn on_toggle_done(&mut self, _: &ToggleDone, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.selected_item else {
+            return;
+        };
+        let Some(location) = self.board.find_item_location(&id) else {
+            return;
+        };
+        let target = match location.status() {
+            Status::Active => Location::Done,
+            Status::Done => Location::Active(Category::Today),
+            Status::Backlog => return,
+        };
+        self.move_selected_to(target, cx);
+    }
+
+    fn on_delete_item(&mut self, _: &DeleteItem, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.selected_item else {
+            return;
+        };
+        let Some(location) = self.board.find_item_location(&id) else {
+            return;
+        };
+        if Storage::delete_item(&self.config.data_dir, &id, &location).is_ok() {
+            let _ = self.board.remove_item(&id, &location);
+            self.selected_item = None;
+            cx.notify();
+        }
     }
 
     fn render_tab(&self, label: &str, screen: Screen, cx: &mut Context<Self>) -> impl IntoElement {
