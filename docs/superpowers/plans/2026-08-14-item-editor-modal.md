@@ -54,7 +54,7 @@
 **Interfaces:**
 - Produces: `pub mod text_input;` in lib.rs, empty `TextInputState` struct
 
-- [ ] **Step 1: Add unicode-segmentation to Cargo.toml**
+- [x] **Step 1: Add unicode-segmentation to Cargo.toml**
 
 Add to `[dependencies]` section:
 
@@ -62,7 +62,7 @@ Add to `[dependencies]` section:
 unicode-segmentation = "1.12"
 ```
 
-- [ ] **Step 2: Add text_input module to lib.rs**
+- [x] **Step 2: Add text_input module to lib.rs**
 
 Add `pub mod text_input;` to `src/lib.rs`:
 
@@ -75,7 +75,7 @@ pub mod storage;
 pub mod text_input;
 ```
 
-- [ ] **Step 3: Create stub text_input.rs**
+- [x] **Step 3: Create stub text_input.rs**
 
 Create `src/text_input.rs`:
 
@@ -83,7 +83,7 @@ Create `src/text_input.rs`:
 // Multi-line text editing state — ported from st project
 ```
 
-- [ ] **Step 4: Create stub test file**
+- [x] **Step 4: Create stub test file**
 
 Create `tests/text_input.rs`:
 
@@ -91,12 +91,12 @@ Create `tests/text_input.rs`:
 // Tests for TextInputState
 ```
 
-- [ ] **Step 5: Verify it builds**
+- [x] **Step 5: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles (unicode-segmentation fetched from crates.io)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock src/lib.rs src/text_input.rs tests/text_input.rs
@@ -114,7 +114,7 @@ git commit -m "chore: add unicode-segmentation dep and text_input module stub"
 **Interfaces:**
 - Produces: `TextInputState::new(initial)`, `content()`, `cursor_offset()`, `selected_range()`, `move_to(offset)`, `move_right()`, `move_left()`, `move_to_home()`, `move_to_end()`
 
-- [ ] **Step 1: Write the failing tests for construction and cursor movement**
+- [x] **Step 1: Write the failing tests for construction and cursor movement**
 
 Replace `tests/text_input.rs` with:
 
@@ -186,12 +186,12 @@ fn test_move_right_with_multibyte() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test text_input`
 Expected: FAIL — `TextInputState` does not exist
 
-- [ ] **Step 3: Implement TextInputState core**
+- [x] **Step 3: Implement TextInputState core**
 
 Replace `src/text_input.rs` with:
 
@@ -279,12 +279,12 @@ impl TextInputState {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test text_input`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/text_input.rs tests/text_input.rs
@@ -302,7 +302,7 @@ git commit -m "feat: port TextInputState core with cursor movement"
 **Interfaces:**
 - Produces: `select_to(offset)`, `select_right()`, `select_left()`, `select_all()`, `insert(text)`, `backspace()`, `delete()`, `replace_range(range, text)`
 
-- [ ] **Step 1: Write the failing tests for editing and selection**
+- [x] **Step 1: Write the failing tests for editing and selection**
 
 Append to `tests/text_input.rs`:
 
@@ -434,12 +434,12 @@ fn test_replace_range() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test text_input`
 Expected: FAIL — `select_to`, `insert`, `backspace`, etc. do not exist
 
-- [ ] **Step 3: Implement editing and selection methods**
+- [x] **Step 3: Implement editing and selection methods**
 
 Add to `impl TextInputState` in `src/text_input.rs`:
 
@@ -510,12 +510,12 @@ Add to `impl TextInputState` in `src/text_input.rs`:
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test text_input`
 Expected: PASS (all tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/text_input.rs tests/text_input.rs
@@ -533,7 +533,7 @@ git commit -m "feat: port TextInputState text editing and selection"
 **Interfaces:**
 - Produces: `UndoEntry` struct, `undo()`, `redo()`, `offset_to_utf16()`, `offset_from_utf16()`, `range_to_utf16()`, `range_from_utf16()`, `word_start()`, `word_end()`, `select_word_at()`
 
-- [ ] **Step 1: Write the failing tests for undo/redo, UTF-16, and word boundaries**
+- [x] **Step 1: Write the failing tests for undo/redo, UTF-16, and word boundaries**
 
 Append to `tests/text_input.rs`:
 
@@ -636,12 +636,12 @@ fn test_select_word_at() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test --test text_input`
 Expected: FAIL — `undo`, `redo`, `offset_to_utf16`, etc. do not exist
 
-- [ ] **Step 3: Implement undo/redo, UTF-16, and word boundaries**
+- [x] **Step 3: Implement undo/redo, UTF-16, and word boundaries**
 
 Add `UndoEntry` struct and undo/redo infrastructure to `src/text_input.rs`:
 
@@ -820,12 +820,12 @@ Add word boundary methods:
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test text_input`
 Expected: PASS (all tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/text_input.rs tests/text_input.rs
@@ -845,7 +845,7 @@ git commit -m "feat: port TextInputState undo/redo, UTF-16, word boundaries"
 
 **Note:** This task has no unit tests — it is GPUI rendering code. The verification gate is `cargo build` succeeding. The `TextInputState` it wraps is fully tested in Tasks 2-4.
 
-- [ ] **Step 1: Add ItemEditor struct and EntityInputHandler impl to app.rs**
+- [x] **Step 1: Add ItemEditor struct and EntityInputHandler impl to app.rs**
 
 Add these imports to the top of `src/app.rs`:
 
@@ -992,7 +992,7 @@ impl EntityInputHandler for ItemEditor {
 }
 ```
 
-- [ ] **Step 2: Add Render impl for ItemEditor**
+- [x] **Step 2: Add Render impl for ItemEditor**
 
 ```rust
 impl Render for ItemEditor {
@@ -1105,12 +1105,12 @@ impl Render for ItemEditor {
 }
 ```
 
-- [ ] **Step 3: Verify it builds**
+- [x] **Step 3: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app.rs
@@ -1128,7 +1128,7 @@ git commit -m "feat: add ItemEditor view with EntityInputHandler and rendering"
 - Consumes: `ItemEditor` from Task 5, `Storage`, `Item`, `Board` from prior tasks
 - Produces: modal overlay when `editing_item` is `Some`, replaces `quick_add_active` placeholder
 
-- [ ] **Step 1: Replace quick_add_active with editing_item field**
+- [x] **Step 1: Replace quick_add_active with editing_item field**
 
 In `KanbanView`, replace:
 
@@ -1154,7 +1154,7 @@ pub struct EditingState {
 
 Update `KanbanView::new` to replace `quick_add_active: false` with `editing_item: None`.
 
-- [ ] **Step 2: Replace on_new_item and commit_quick_add with editor-based flow**
+- [x] **Step 2: Replace on_new_item and commit_quick_add with editor-based flow**
 
 Replace `on_new_item`:
 
@@ -1223,7 +1223,7 @@ fn cancel_editor(&mut self, cx: &mut Context<Self>) {
 }
 ```
 
-- [ ] **Step 3: Add double-click to edit existing items**
+- [x] **Step 3: Add double-click to edit existing items**
 
 Add an `on_double_click` to `render_item_card`:
 
@@ -1273,7 +1273,7 @@ fn render_item_card(&self, item: &Item, cx: &mut Context<Self>) -> impl IntoElem
 }
 ```
 
-- [ ] **Step 4: Render the modal overlay**
+- [x] **Step 4: Render the modal overlay**
 
 Replace `render_quick_add_bar` with `render_editor_modal`:
 
@@ -1318,7 +1318,7 @@ Also wire `EditorEscape` and `EditorSave` actions on the root div:
 .on_action(cx.listener(|this, _: &EditorSave, _, cx| this.save_editor(cx)))
 ```
 
-- [ ] **Step 5: Add keybindings for editor**
+- [x] **Step 5: Add keybindings for editor**
 
 Add to `key_bindings()`:
 
@@ -1339,7 +1339,7 @@ KeyBinding::new("cmd-z", EditorUndo, Some("ItemEditor")),
 KeyBinding::new("cmd-shift-z", EditorRedo, Some("ItemEditor")),
 ```
 
-- [ ] **Step 6: Add Save/Cancel/Tear-Off button click handlers**
+- [x] **Step 6: Add Save/Cancel/Tear-Off button click handlers**
 
 The buttons need click handlers. Update the button divs in `ItemEditor::render` to call actions:
 
@@ -1363,12 +1363,12 @@ Actually, GPUI's action dispatch from a child view to parent is complex. The sim
 
 Revised approach: Move the button bar out of `ItemEditor::render` into the modal overlay in `KanbanView::render_editor_modal`. This way the buttons can call `KanbanView` methods directly.
 
-- [ ] **Step 7: Verify it builds**
+- [x] **Step 7: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/app.rs
@@ -1385,7 +1385,7 @@ git commit -m "feat: wire ItemEditor as modal overlay with save/cancel/tear-off"
 **Interfaces:**
 - Produces: `tear_off_editor` method that opens a new GPUI window with the `ItemEditor` view
 
-- [ ] **Step 1: Add tear_off_editor method**
+- [x] **Step 1: Add tear_off_editor method**
 
 Add to `KanbanView`:
 
@@ -1430,7 +1430,7 @@ fn tear_off_editor(&mut self, cx: &mut Context<Self>) {
 }
 ```
 
-- [ ] **Step 2: Add tear-off button to the modal overlay**
+- [x] **Step 2: Add tear-off button to the modal overlay**
 
 In `render_editor_modal`, add the tear-off button with the expand icon (⤢) and tooltip:
 
@@ -1457,12 +1457,12 @@ div()
     )
 ```
 
-- [ ] **Step 3: Verify it builds**
+- [x] **Step 3: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app.rs
@@ -1477,22 +1477,22 @@ git commit -m "feat: add tear-off to separate window with expand icon"
 - Modify: `src/app.rs` (remove dead code, fix warnings)
 - Verify: all tests pass
 
-- [ ] **Step 1: Run clippy**
+- [x] **Step 1: Run clippy**
 
 Run: `cargo clippy`
 Expected: no warnings
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run: `cargo test`
 Expected: all tests pass
 
-- [ ] **Step 3: Verify the app launches**
+- [x] **Step 3: Verify the app launches**
 
 Run: `cargo run`
 Expected: window opens, cmd-n opens editor modal, typing works, save creates item
 
-- [ ] **Step 4: Commit any fixes**
+- [x] **Step 4: Commit any fixes**
 
 ```bash
 git add -A
