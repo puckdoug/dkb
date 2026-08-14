@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::board::Board;
 use crate::config::Config;
+use crate::item::Item;
 use crate::storage::Storage;
 use uuid::Uuid;
 
@@ -146,11 +147,12 @@ impl Render for KanbanView {
             .child(
                 div()
                     .flex_1()
-                    .p(px(16.))
+                    .flex()
+                    .flex_col()
                     .child(match screen {
-                        Screen::Backlog => "Backlog Screen",
-                        Screen::Active => "Active Screen",
-                        Screen::Done => "Done Screen",
+                        Screen::Backlog => self.render_backlog_screen(cx).into_any_element(),
+                        Screen::Active => self.render_active_screen(cx).into_any_element(),
+                        Screen::Done => self.render_done_screen(cx).into_any_element(),
                     }),
             )
     }
@@ -194,5 +196,106 @@ impl KanbanView {
                 }),
             )
             .child(label.to_string())
+    }
+
+    fn render_item_card(&self, item: &Item, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_selected = self.selected_item == Some(item.id);
+        let item_id = item.id;
+        div()
+            .w_full()
+            .p(px(8.))
+            .mb(px(4.))
+            .rounded(px(4.))
+            .bg(if is_selected { rgb(0xe3f2fd) } else { rgb(0xffffff) })
+            .border_1()
+            .border_color(if is_selected { rgb(0x2196f3) } else { rgb(0xdddddd) })
+            .cursor_pointer()
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, _, _window, cx| {
+                    this.selected_item = Some(item_id);
+                    cx.notify();
+                }),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(0x333333))
+                    .child(item.title()),
+            )
+    }
+
+    fn render_column(
+        &self,
+        title: &str,
+        items: &[Item],
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let item_count = items.len();
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .bg(rgb(0xeceff1))
+            .rounded(px(4.))
+            .p(px(8.))
+            .m(px(4.))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .justify_between()
+                    .items_center()
+                    .mb(px(8.))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(0x37474f))
+                            .child(title.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(0x78909c))
+                            .child(format!("{}", item_count)),
+                    ),
+            )
+            .children({
+                let mut cards: Vec<gpui::AnyElement> = Vec::new();
+                for item in items {
+                    cards.push(self.render_item_card(item, cx).into_any_element());
+                }
+                cards
+            })
+    }
+
+    fn render_backlog_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_row()
+            .flex_1()
+            .p(px(8.))
+            .child(self.render_column("Backlog", &self.board.backlog, cx))
+    }
+
+    fn render_active_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_row()
+            .flex_1()
+            .p(px(4.))
+            .child(self.render_column("Yesterday", &self.board.active.yesterday, cx))
+            .child(self.render_column("Today", &self.board.active.today, cx))
+            .child(self.render_column("This Week", &self.board.active.this_week, cx))
+            .child(self.render_column("Next Week", &self.board.active.next_week, cx))
+    }
+
+    fn render_done_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_row()
+            .flex_1()
+            .p(px(8.))
+            .child(self.render_column("Done", &self.board.done, cx))
     }
 }
