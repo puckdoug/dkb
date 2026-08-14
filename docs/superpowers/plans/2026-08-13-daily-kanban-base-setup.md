@@ -1598,7 +1598,7 @@ git add src/board.rs tests/board.rs && git commit -m "feat: add Board lifecycle 
 - Consumes: `Board`, `Item`, `Location`, `Config`, `Storage` from prior tasks
 - Produces: `KanbanView` with full state, GPUI actions, keybindings, menu setup, `Screen` enum
 
-- [ ] **Step 1: Define actions and Screen enum**
+- [x] **Step 1: Define actions and Screen enum**
 
 Replace `src/app.rs` with the action definitions and Screen enum (no tests yet — this is wiring):
 
@@ -1777,7 +1777,7 @@ impl KanbanView {
 }
 ```
 
-- [ ] **Step 2: Update bin/dkb.rs to use setup_menus**
+- [x] **Step 2: Update bin/dkb.rs to use setup_menus**
 
 Replace `src/bin/dkb.rs` with:
 
@@ -1815,12 +1815,12 @@ fn main() {
 }
 ```
 
-- [ ] **Step 3: Verify it builds**
+- [x] **Step 3: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles successfully
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app.rs src/bin/dkb.rs && git commit -m "feat: add KanbanView with actions, keybindings, menus, and tab bar"
@@ -1837,7 +1837,7 @@ git add src/app.rs src/bin/dkb.rs && git commit -m "feat: add KanbanView with ac
 - Consumes: `KanbanView` from Task 10
 - Produces: action handlers for `ShowBacklog`, `ShowActive`, `ShowDone`, `CloseWindow`
 
-- [ ] **Step 1: Add action handlers for screen switching and close**
+- [x] **Step 1: Add action handlers for screen switching and close**
 
 Add to `impl KanbanView` in `src/app.rs`:
 
@@ -1862,7 +1862,7 @@ fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Co
 }
 ```
 
-- [ ] **Step 2: Wire actions in render**
+- [x] **Step 2: Wire actions in render**
 
 Update the `Render` impl for `KanbanView`. Replace the `render` method body to register action handlers on the root div:
 
@@ -1925,12 +1925,12 @@ fn render_tab(&self, label: &str, screen: Screen, cx: &mut Context<Self>) -> imp
 }
 ```
 
-- [ ] **Step 3: Verify it builds**
+- [x] **Step 3: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app.rs && git commit -m "feat: add screen switching via tabs and keyboard shortcuts"
@@ -1947,7 +1947,7 @@ git add src/app.rs && git commit -m "feat: add screen switching via tabs and key
 - Consumes: `Board`, `Item` from prior tasks
 - Produces: rendering of item cards and columns for each screen
 
-- [ ] **Step 1: Add item card and column rendering methods**
+- [x] **Step 1: Add item card and column rendering methods**
 
 Add to `impl KanbanView` in `src/app.rs`:
 
@@ -2030,7 +2030,7 @@ fn render_done_screen(&self) -> impl IntoElement {
 }
 ```
 
-- [ ] **Step 2: Update render to use screen-specific rendering**
+- [x] **Step 2: Update render to use screen-specific rendering**
 
 Replace the `render` method's content area child. The full `Render` impl:
 
@@ -2068,12 +2068,12 @@ impl Render for KanbanView {
 }
 ```
 
-- [ ] **Step 3: Verify it builds**
+- [x] **Step 3: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app.rs && git commit -m "feat: render item cards and columns for all three screens"
@@ -2090,7 +2090,7 @@ git add src/app.rs && git commit -m "feat: render item cards and columns for all
 - Consumes: `Board::move_item`, `Board::can_move`, `Storage::move_item` from prior tasks
 - Produces: action handlers for `MoveToYesterday`, `MoveToToday`, `MoveToThisWeek`, `MoveToNextWeek`, `MoveToBacklog`, `ToggleDone`, `DeleteItem`, mouse-click selection, `Tab`/`Shift-Tab` keyboard navigation
 
-- [ ] **Step 1: Add selection by mouse click**
+- [x] **Step 1: Add selection by mouse click**
 
 Update `render_item_card` to handle mouse-down for selection. The method needs `cx` now:
 
@@ -2189,7 +2189,7 @@ Update the `render` method to pass `cx`:
 }))
 ```
 
-- [ ] **Step 2: Add move action handlers**
+- [x] **Step 2: Add move action handlers**
 
 Add to `impl KanbanView`:
 
@@ -2277,7 +2277,7 @@ fn on_delete_item(&mut self, _: &DeleteItem, _window: &mut Window, cx: &mut Cont
 }
 ```
 
-- [ ] **Step 3: Wire all action handlers in render**
+- [x] **Step 3: Wire all action handlers in render**
 
 Add these to the root div in `render`:
 
@@ -2291,12 +2291,12 @@ Add these to the root div in `render`:
 .on_action(cx.listener(Self::on_delete_item))
 ```
 
-- [ ] **Step 4: Verify it builds**
+- [x] **Step 4: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app.rs && git commit -m "feat: add item selection, move actions, delete, and toggle done"
@@ -2313,7 +2313,7 @@ git add src/app.rs && git commit -m "feat: add item selection, move actions, del
 - Consumes: `Item::new`, `Storage::write_item` from prior tasks
 - Produces: `NewItem` action handler that creates an item in the current screen's default location
 
-- [ ] **Step 1: Add quick-add state and action handler**
+- [x] **Step 1: Add quick-add state and action handler**
 
 Add `quick_add_input: Option<String>` field to `KanbanView`:
 
@@ -2334,7 +2334,7 @@ Update `KanbanView::new` to initialize it:
 quick_add_input: None,
 ```
 
-- [ ] **Step 2: Add the NewItem action handler**
+- [x] **Step 2: Add the NewItem action handler**
 
 ```rust
 fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
@@ -2372,7 +2372,7 @@ fn cancel_quick_add(&mut self, cx: &mut Context<Self>) {
 }
 ```
 
-- [ ] **Step 3: Render the quick-add input when active**
+- [x] **Step 3: Render the quick-add input when active**
 
 Add a method to render the quick-add bar:
 
@@ -2401,7 +2401,7 @@ fn render_quick_add(&self, cx: &mut Context<Self>) -> impl IntoElement {
 }
 ```
 
-- [ ] **Step 4: Wire NewItem action and add quick-add bar to render**
+- [x] **Step 4: Wire NewItem action and add quick-add bar to render**
 
 Add `.on_action(cx.listener(Self::on_new_item))` to the root div in `render`.
 
@@ -2416,12 +2416,12 @@ Insert the quick-add bar between the tab bar and the content area:
 }))
 ```
 
-- [ ] **Step 5: Verify it builds**
+- [x] **Step 5: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/app.rs && git commit -m "feat: add quick-add new item with NewItem action"
@@ -2438,7 +2438,7 @@ git add src/app.rs && git commit -m "feat: add quick-add new item with NewItem a
 - Consumes: `KanbanView`, `Board` from prior tasks
 - Produces: Tab/Shift-Tab handlers that advance/reverse selection through items on the current screen
 
-- [ ] **Step 1: Add a helper to get the ordered item list for the current screen**
+- [x] **Step 1: Add a helper to get the ordered item list for the current screen**
 
 Add to `impl KanbanView`:
 
@@ -2493,7 +2493,7 @@ fn current_screen_items(&self) -> Vec<(Uuid, Location)> {
 }
 ```
 
-- [ ] **Step 2: Add Tab and Shift-Tab action definitions**
+- [x] **Step 2: Add Tab and Shift-Tab action definitions**
 
 Add `NextItem` and `PrevItem` to the `actions!` macro in `src/app.rs`:
 
@@ -2508,7 +2508,7 @@ actions!(
 );
 ```
 
-- [ ] **Step 3: Add keybindings for Tab and Shift-Tab**
+- [x] **Step 3: Add keybindings for Tab and Shift-Tab**
 
 Add to `key_bindings()`:
 
@@ -2517,7 +2517,7 @@ KeyBinding::new("tab", NextItem, None),
 KeyBinding::new("shift-tab", PrevItem, None),
 ```
 
-- [ ] **Step 4: Implement the action handlers**
+- [x] **Step 4: Implement the action handlers**
 
 Add to `impl KanbanView`:
 
@@ -2564,7 +2564,7 @@ fn on_prev_item(&mut self, _: &PrevItem, _window: &mut Window, cx: &mut Context<
 }
 ```
 
-- [ ] **Step 5: Wire the actions in render**
+- [x] **Step 5: Wire the actions in render**
 
 Add to the root div in `render`:
 
@@ -2573,12 +2573,12 @@ Add to the root div in `render`:
 .on_action(cx.listener(Self::on_prev_item))
 ```
 
-- [ ] **Step 6: Verify it builds**
+- [x] **Step 6: Verify it builds**
 
 Run: `cargo build`
 Expected: compiles
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/app.rs && git commit -m "feat: add Tab/Shift-Tab keyboard navigation for item selection"
@@ -2591,22 +2591,22 @@ git add src/app.rs && git commit -m "feat: add Tab/Shift-Tab keyboard navigation
 **Files:**
 - None modified
 
-- [ ] **Step 1: Run all tests**
+- [x] **Step 1: Run all tests**
 
 Run: `cargo test`
 Expected: all tests pass
 
-- [ ] **Step 2: Build the release binary**
+- [x] **Step 2: Build the release binary**
 
 Run: `cargo build`
 Expected: compiles without warnings (or only GPUI-internal warnings)
 
-- [ ] **Step 3: Run the app to verify it launches**
+- [x] **Step 3: Run the app to verify it launches**
 
 Run: `cargo run`
 Expected: a window titled "Daily Kanban" opens with a tab bar (Backlog/Active/Done) and the active screen showing four empty columns (Yesterday/Today/This Week/Next Week)
 
-- [ ] **Step 4: Commit any final fixes**
+- [x] **Step 4: Commit any final fixes**
 
 If any issues were found and fixed during verification:
 
