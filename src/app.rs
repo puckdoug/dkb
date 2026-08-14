@@ -25,6 +25,8 @@ actions!(
         ShowBacklog,
         ShowActive,
         ShowDone,
+        NextItem,
+        PrevItem,
     ]
 );
 
@@ -77,6 +79,8 @@ impl KanbanView {
             KeyBinding::new("cmd-b", MoveToBacklog, None),
             KeyBinding::new("cmd-d", ToggleDone, None),
             KeyBinding::new("delete", DeleteItem, None),
+            KeyBinding::new("tab", NextItem, None),
+            KeyBinding::new("shift-tab", PrevItem, None),
         ]
     }
 
@@ -143,6 +147,8 @@ impl Render for KanbanView {
             .on_action(cx.listener(Self::on_toggle_done))
             .on_action(cx.listener(Self::on_delete_item))
             .on_action(cx.listener(Self::on_new_item))
+            .on_action(cx.listener(Self::on_next_item))
+            .on_action(cx.listener(Self::on_prev_item))
             .child(
                 div()
                     .flex()
@@ -261,6 +267,62 @@ impl KanbanView {
 
     fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
         self.quick_add_active = true;
+        cx.notify();
+    }
+
+    fn current_screen_items(&self) -> Vec<Uuid> {
+        match self.current_screen {
+            Screen::Backlog => self.board.backlog.iter().map(|i| i.id).collect(),
+            Screen::Active => {
+                let mut items = Vec::new();
+                items.extend(self.board.active.yesterday.iter().map(|i| i.id));
+                items.extend(self.board.active.today.iter().map(|i| i.id));
+                items.extend(self.board.active.this_week.iter().map(|i| i.id));
+                items.extend(self.board.active.next_week.iter().map(|i| i.id));
+                items
+            }
+            Screen::Done => self.board.done.iter().map(|i| i.id).collect(),
+        }
+    }
+
+    fn on_next_item(&mut self, _: &NextItem, _window: &mut Window, cx: &mut Context<Self>) {
+        let items = self.current_screen_items();
+        if items.is_empty() {
+            return;
+        }
+        let next = match self.selected_item {
+            None => items[0],
+            Some(current) => {
+                let pos = items.iter().position(|id| *id == current);
+                match pos {
+                    None => items[0],
+                    Some(idx) => items[(idx + 1) % items.len()],
+                }
+            }
+        };
+        self.selected_item = Some(next);
+        cx.notify();
+    }
+
+    fn on_prev_item(&mut self, _: &PrevItem, _window: &mut Window, cx: &mut Context<Self>) {
+        let items = self.current_screen_items();
+        if items.is_empty() {
+            return;
+        }
+        let prev = match self.selected_item {
+            None => items[items.len() - 1],
+            Some(current) => {
+                let pos = items.iter().position(|id| *id == current);
+                match pos {
+                    None => items[items.len() - 1],
+                    Some(idx) => {
+                        let len = items.len();
+                        items[(idx + len - 1) % len]
+                    }
+                }
+            }
+        };
+        self.selected_item = Some(prev);
         cx.notify();
     }
 
