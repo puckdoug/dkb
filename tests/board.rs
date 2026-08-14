@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 use dkb::board::Board;
 use dkb::item::{Category, Item};
 use dkb::storage::{Location, Storage};
@@ -64,6 +66,20 @@ fn test_can_move_done_to_active() {
     let (_tmp, board) = make_board_with_items();
     let id = board.done[0].id;
     assert!(board.can_move(&id, &Location::Active(Category::Today)));
+}
+
+#[test]
+fn test_can_move_done_to_backlog() {
+    let (_tmp, board) = make_board_with_items();
+    let id = board.done[0].id;
+    assert!(board.can_move(&id, &Location::Backlog));
+}
+
+#[test]
+fn test_can_move_active_to_backlog() {
+    let (_tmp, board) = make_board_with_items();
+    let id = board.active.today[0].id;
+    assert!(board.can_move(&id, &Location::Backlog));
 }
 
 #[test]

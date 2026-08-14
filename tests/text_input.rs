@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 use dkb::text_input::TextInputState;
 
 // -- Construction --

@@ -7,4 +7,5 @@ Rust project `dkb`. Minimal scaffold, no commits yet.
 - Single binary, entrypoint `src/main.rs`.
 - use ripgrep (`rg`) in preference to grep
 - Always confirm `cargo clippy` warnings are addressed
+- Always review `cargo clippy --workspace --all-targets -- -D warnings -D clippy::pedantic` and address items which make sense or mark with #[allow(clippy::lint_name)]
 - when implementation is done move specs/plans into done/{specs,plans}

@@ -1,3 +1,11 @@
+#![allow(
+    clippy::too_many_lines,
+    clippy::unreadable_literal,
+    clippy::uninlined_format_args,
+    clippy::if_not_else,
+    clippy::map_unwrap_or
+)]
+
 use std::ops::Range;
 
 use gpui::{
@@ -13,7 +21,13 @@ use crate::item::{Category, Item};
 use crate::storage::{Location, Storage};
 use crate::text_input::TextInputState;
 use crate::theme::Theme;
-use crate::vi::{ViMode, ViState};
+use crate::vi::{SearchDirection, ViActionResult, ViMode, ViState, VisualKind};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorEvent {
+    Save,
+    Close,
+}
 
 actions!(
     dkb_editor,
@@ -51,6 +65,8 @@ pub struct ItemEditor {
     pub is_torn_off: bool,
 }
 
+impl gpui::EventEmitter<EditorEvent> for ItemEditor {}
+
 impl ItemEditor {
     pub fn new(
         cx: &mut Context<Self>,
@@ -71,8 +87,34 @@ impl ItemEditor {
         }
     }
 
+    #[must_use]
     pub fn content(&self) -> &str {
         self.state.content()
+    }
+
+    pub fn process_vi_action(
+        &mut self,
+        action: &ViActionResult,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            ViActionResult::Save => {
+                self.on_save(&SaveEditor, window, cx);
+            }
+            ViActionResult::Close { .. } => {
+                self.on_close(&CloseWindow, window, cx);
+            }
+            ViActionResult::SaveAndClose => {
+                self.on_save(&SaveEditor, window, cx);
+                self.on_close(&CloseWindow, window, cx);
+            }
+            ViActionResult::ExecuteEx(cmd) => {
+                let action = self.vi_state.execute_ex_command(cmd.clone(), &mut self.state);
+                self.process_vi_action(&action, window, cx);
+            }
+            ViActionResult::Handled | ViActionResult::None => {}
+        }
     }
 
     pub fn on_save(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
@@ -94,30 +136,68 @@ impl ItemEditor {
                 self.is_new = false;
             }
         } else if let Some(id) = self.editing_item_id {
+            let locations = [
+                Location::Backlog,
+                Location::Active(Category::Yesterday),
+                Location::Active(Category::Today),
+                Location::Active(Category::ThisWeek),
+                Location::Active(Category::NextWeek),
+                Location::Done,
+            ];
+            let location = locations
+                .iter()
+                .find(|loc| {
+                    self.config
+                        .data_dir
+                        .join(loc.to_path())
+                        .join(format!("{id}.md"))
+                        .exists()
+                })
+                .copied()
+                .unwrap_or(Location::Active(Category::Today));
+
             let item = Item {
                 id,
                 body: content,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
-                completed_at: None,
+                completed_at: if matches!(location, Location::Done) {
+                    Some(chrono::Utc::now())
+                } else {
+                    None
+                },
             };
-            let location = Location::Active(Category::Today);
             let _ = Storage::write_item(&self.config.data_dir, &item, &location);
+        }
+        cx.emit(EditorEvent::Save);
+        cx.notify();
+    }
+
+    pub fn on_close(&mut self, _: &CloseWindow, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_torn_off {
+            window.remove_window();
+        } else {
+            cx.emit(EditorEvent::Close);
+        }
+    }
+
+    pub fn on_backspace(&mut self, _: &EditorBackspace, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
+            let action = self.vi_state.handle_key("backspace", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.backspace();
         }
         cx.notify();
     }
 
-    pub fn on_close(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Context<Self>) {
-        window.remove_window();
-    }
-
-    pub fn on_backspace(&mut self, _: &EditorBackspace, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.backspace();
-        cx.notify();
-    }
-
-    pub fn on_delete(&mut self, _: &EditorDelete, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.delete();
+    pub fn on_delete(&mut self, _: &EditorDelete, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
+            let action = self.vi_state.handle_key("backspace", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.delete();
+        }
         cx.notify();
     }
 
@@ -161,27 +241,26 @@ impl ItemEditor {
         cx.notify();
     }
 
-    pub fn on_enter(&mut self, _: &EditorEnter, _: &mut Window, cx: &mut Context<Self>) {
-        if self.config.vi_mode && self.vi_state.mode == ViMode::Normal {
-            self.state.move_down();
+    pub fn on_enter(&mut self, _: &EditorEnter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode {
+            if matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
+                let action = self.vi_state.handle_key("enter", &mut self.state);
+                self.process_vi_action(&action, window, cx);
+            } else if self.vi_state.mode == ViMode::Normal {
+                self.state.move_down();
+            } else {
+                self.state.insert("\n");
+            }
         } else {
             self.state.insert("\n");
         }
         cx.notify();
     }
 
-    pub fn on_escape(&mut self, _: &EditorEscape, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_escape(&mut self, _: &EditorEscape, window: &mut Window, cx: &mut Context<Self>) {
         if self.config.vi_mode {
-            self.vi_state.mode = ViMode::Normal;
-            self.vi_state.visual_anchor = None;
-            self.vi_state.pending_op = None;
-            if self.state.cursor_offset() > 0 && self.state.selected_range().is_empty() {
-                let cur = self.state.cursor_offset();
-                let line_start = self.state.find_line_start(cur);
-                if cur > line_start {
-                    self.state.move_left();
-                }
-            }
+            let action = self.vi_state.handle_key("escape", &mut self.state);
+            self.process_vi_action(&action, window, cx);
             cx.notify();
         }
     }
@@ -275,23 +354,22 @@ impl EntityInputHandler for ItemEditor {
         &mut self,
         range_utf16: Option<Range<usize>>,
         new_text: &str,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.config.vi_mode {
-            let handled = self.vi_state.handle_key(new_text, &mut self.state);
-            if !handled && self.vi_state.mode == ViMode::Insert {
+            let action = self.vi_state.handle_key(new_text, &mut self.state);
+            self.process_vi_action(&action, window, cx);
+            if action == ViActionResult::None && self.vi_state.mode == ViMode::Insert {
                 let range = range_utf16
                     .as_ref()
-                    .map(|r| self.state.range_from_utf16(r))
-                    .unwrap_or_else(|| self.state.selected_range());
+                    .map_or_else(|| self.state.selected_range(), |r| self.state.range_from_utf16(r));
                 self.state.replace_range(range, new_text);
             }
         } else {
             let range = range_utf16
                 .as_ref()
-                .map(|r| self.state.range_from_utf16(r))
-                .unwrap_or_else(|| self.state.selected_range());
+                .map_or_else(|| self.state.selected_range(), |r| self.state.range_from_utf16(r));
             self.state.replace_range(range, new_text);
         }
         cx.notify();
@@ -302,23 +380,22 @@ impl EntityInputHandler for ItemEditor {
         range_utf16: Option<Range<usize>>,
         new_text: &str,
         _new_selected_range_utf16: Option<Range<usize>>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.config.vi_mode {
-            let handled = self.vi_state.handle_key(new_text, &mut self.state);
-            if !handled && self.vi_state.mode == ViMode::Insert {
+            let action = self.vi_state.handle_key(new_text, &mut self.state);
+            self.process_vi_action(&action, window, cx);
+            if action == ViActionResult::None && self.vi_state.mode == ViMode::Insert {
                 let range = range_utf16
                     .as_ref()
-                    .map(|r| self.state.range_from_utf16(r))
-                    .unwrap_or_else(|| self.state.selected_range());
+                    .map_or_else(|| self.state.selected_range(), |r| self.state.range_from_utf16(r));
                 self.state.replace_range(range, new_text);
             }
         } else {
             let range = range_utf16
                 .as_ref()
-                .map(|r| self.state.range_from_utf16(r))
-                .unwrap_or_else(|| self.state.selected_range());
+                .map_or_else(|| self.state.selected_range(), |r| self.state.range_from_utf16(r));
             self.state.replace_range(range, new_text);
         }
         cx.notify();
@@ -575,9 +652,13 @@ impl Render for ItemEditor {
         };
 
         let vi_status_text = match self.vi_state.mode {
-            ViMode::Normal => "-- NORMAL --",
-            ViMode::Insert => "-- INSERT --",
-            ViMode::Visual => "-- VISUAL --",
+            ViMode::Normal => format!("-- {} --", crate::i18n::t("editor.status.normal", self.config.language)),
+            ViMode::Insert => format!("-- {} --", crate::i18n::t("editor.status.insert", self.config.language)),
+            ViMode::Visual(VisualKind::Character) => format!("-- {} --", crate::i18n::t("editor.status.visual", self.config.language)),
+            ViMode::Visual(VisualKind::Line) => format!("-- {} LINE --", crate::i18n::t("editor.status.visual", self.config.language)),
+            ViMode::Command => format!("-- {} --", crate::i18n::t("editor.status.command", self.config.language)),
+            ViMode::Search(_) => "-- SEARCH --".to_string(),
+            ViMode::Replace => "-- REPLACE --".to_string(),
         };
 
         div()
@@ -588,21 +669,13 @@ impl Render for ItemEditor {
             .track_focus(&self.focus_handle)
             .key_context("ItemEditor")
             .cursor(gpui::CursorStyle::IBeam)
-            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 let key = event.keystroke.key.as_str();
                 if (key == "escape" || key == "Esc" || key == "Escape" || key == "\x1b")
                     && this.config.vi_mode
                 {
-                    this.vi_state.mode = ViMode::Normal;
-                    this.vi_state.visual_anchor = None;
-                    this.vi_state.pending_op = None;
-                    if this.state.cursor_offset() > 0 && this.state.selected_range().is_empty() {
-                        let cur = this.state.cursor_offset();
-                        let line_start = this.state.find_line_start(cur);
-                        if cur > line_start {
-                            this.state.move_left();
-                        }
-                    }
+                    let action = this.vi_state.handle_key("escape", &mut this.state);
+                    this.process_vi_action(&action, window, cx);
                     cx.notify();
                 }
             }))
@@ -644,8 +717,69 @@ impl Render for ItemEditor {
                             }),
                     ),
             )
-            // Vi Mode Status Bar
+            // Vi Mode Status Bar / Command Line / Search Bar
             .when(show_vi_status, |this| {
+                let status_content = match &self.vi_state.mode {
+                    ViMode::Command => {
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .child(
+                                div()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(theme.accent)
+                                    .child(":"),
+                            )
+                            .child(
+                                div()
+                                    .text_color(theme.text_primary)
+                                    .child(self.vi_state.command_buffer.clone()),
+                            )
+                            .child(
+                                div()
+                                    .w(px(2.))
+                                    .h(px(14.))
+                                    .ml(px(1.))
+                                    .bg(theme.accent),
+                            )
+                    }
+                    ViMode::Search(dir) => {
+                        let prefix = match dir {
+                            SearchDirection::Forward => "/",
+                            SearchDirection::Backward => "?",
+                        };
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .child(
+                                div()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(theme.accent)
+                                    .child(prefix),
+                            )
+                            .child(
+                                div()
+                                    .text_color(theme.text_primary)
+                                    .child(self.vi_state.search_buffer.clone()),
+                            )
+                            .child(
+                                div()
+                                    .w(px(2.))
+                                    .h(px(14.))
+                                    .ml(px(1.))
+                                    .bg(theme.accent),
+                            )
+                    }
+                    _ => {
+                        div()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(theme.accent)
+                            .child(vi_status_text)
+                    }
+                };
+
                 this.child(
                     div()
                         .flex()
@@ -658,12 +792,7 @@ impl Render for ItemEditor {
                         .border_color(theme.border)
                         .text_xs()
                         .text_color(theme.text_secondary)
-                        .child(
-                            div()
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme.accent)
-                                .child(vi_status_text),
-                        ),
+                        .child(status_content),
                 )
             })
             // Bottom button bar — only shown in torn-off window (modal has its own)
@@ -691,7 +820,7 @@ impl Render for ItemEditor {
                                         this.on_save(&SaveEditor, window, cx);
                                     }),
                                 )
-                                .child("Save"),
+                                .child(crate::i18n::t("editor.save", self.config.language)),
                         )
                         .child(
                             div()
@@ -710,7 +839,7 @@ impl Render for ItemEditor {
                                         window.remove_window();
                                     }),
                                 )
-                                .child("Cancel"),
+                                .child(crate::i18n::t("editor.cancel", self.config.language)),
                         ),
                 )
             })

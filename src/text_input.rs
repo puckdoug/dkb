@@ -71,16 +71,14 @@ impl TextInputState {
         let offset = offset.min(self.content.len());
         self.content[..offset]
             .rfind('\n')
-            .map(|idx| idx + 1)
-            .unwrap_or(0)
+            .map_or(0, |idx| idx + 1)
     }
 
     pub fn find_line_end(&self, offset: usize) -> usize {
         let offset = offset.min(self.content.len());
         self.content[offset..]
             .find('\n')
-            .map(|idx| offset + idx)
-            .unwrap_or(self.content.len())
+            .map_or(self.content.len(), |idx| offset + idx)
     }
 
     pub fn find_line_up(&self, offset: usize) -> usize {

@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 use dkb::item::{Category, Item, Status};
 use dkb::storage::{Location, Storage};
 use std::path::PathBuf;

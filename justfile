@@ -4,7 +4,10 @@ test:
   cargo test
 
 check:
-  cargo clippy
+  cargo clippy --all-targets
+
+pedantic:
+  cargo clippy --workspace --all-targets -- -D warnings -D clippy::pedantic
 
 build:
   cargo build

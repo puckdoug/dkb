@@ -128,9 +128,6 @@ impl Board {
         if from.status() == Status::Backlog && to.status() == Status::Done {
             return false;
         }
-        if from.status() == Status::Done && to.status() == Status::Backlog {
-            return false;
-        }
         if from == *to {
             return false;
         }

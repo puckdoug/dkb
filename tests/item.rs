@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 use chrono::Utc;
 use dkb::item::{Category, Item, Status};
 

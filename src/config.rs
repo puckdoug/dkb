@@ -1,3 +1,5 @@
+use crate::i18n::Language;
+use crate::viewer::ViewerPreference;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -19,6 +21,10 @@ pub struct Config {
     pub line_numbers: bool,
     #[serde(default)]
     pub theme_mode: ThemeMode,
+    #[serde(default)]
+    pub language: Language,
+    #[serde(default)]
+    pub markdown_viewer: ViewerPreference,
 }
 
 impl Config {
@@ -45,6 +51,8 @@ impl Config {
                 vi_mode: false,
                 line_numbers: false,
                 theme_mode: ThemeMode::System,
+                language: Language::Auto,
+                markdown_viewer: ViewerPreference::Auto,
             };
             default_config.save_to(config_path)?;
             return Ok(default_config);
@@ -57,9 +65,14 @@ impl Config {
                 vi_mode: false,
                 line_numbers: false,
                 theme_mode: ThemeMode::System,
+                language: Language::Auto,
+                markdown_viewer: ViewerPreference::Auto,
             });
         
         config.data_dir = Self::expand_tilde(&config.data_dir.to_string_lossy());
+        if let ViewerPreference::Custom(ref path) = config.markdown_viewer {
+            config.markdown_viewer = ViewerPreference::Custom(Self::expand_tilde(&path.to_string_lossy()));
+        }
         Ok(config)
     }
 

@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 use dkb::item::{Category, Item};
 use dkb::link::{count_recursive_subitems, extract_links};
 use dkb::storage::{Location, Storage};

@@ -1,3 +1,16 @@
+#![allow(
+    clippy::too_many_lines,
+    clippy::unreadable_literal,
+    clippy::unused_self,
+    clippy::uninlined_format_args,
+    clippy::match_same_arms,
+    clippy::if_not_else,
+    clippy::map_unwrap_or,
+    clippy::redundant_closure_for_method_calls,
+    clippy::must_use_candidate,
+    clippy::needless_pass_by_value
+)]
+
 use gpui::{
     actions, div, prelude::*, px, rgb, rgba, App, Context, FocusHandle,
     Focusable, IntoElement, KeyBinding, Menu, MenuItem, MouseButton, MouseDownEvent, Render,
@@ -6,9 +19,10 @@ use gpui::{
 
 use crate::board::Board;
 use crate::config::{Config, ThemeMode};
+use crate::i18n::Language;
 use crate::editor::{
     CloseWindow, EditorBackspace, EditorCopy, EditorCut, EditorDelete, EditorDown, EditorEnter,
-    EditorEscape, EditorLeft, EditorPaste, EditorRedo, EditorRight, EditorSelectAll,
+    EditorEscape, EditorEvent, EditorLeft, EditorPaste, EditorRedo, EditorRight, EditorSelectAll,
     EditorSelectDown, EditorSelectLeft, EditorSelectRight, EditorSelectUp, EditorUndo, EditorUp,
     ItemEditor, SaveEditor,
 };
@@ -23,6 +37,8 @@ actions!(
     [
         NewItem,
         Quit,
+        OpenNewMainWindow,
+        OpenInMarkdownViewer,
         MoveToBacklog,
         MoveToYesterday,
         MoveToToday,
@@ -48,8 +64,16 @@ actions!(
         CreateSubItem,
         DrillDownSubItem,
         DrillUpBreadcrumb,
+        MoveItemUp,
+        MoveItemDown,
     ]
 );
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContextMenuState {
+    pub item_id: Uuid,
+    pub position: gpui::Point<gpui::Pixels>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -84,6 +108,7 @@ impl Render for DraggedCard {
 
 pub struct EditingState {
     pub editor: gpui::Entity<ItemEditor>,
+    pub subscription: Option<gpui::Subscription>,
 }
 
 // -- Simple tooltip view --
@@ -115,6 +140,8 @@ pub struct KanbanView {
     pub selected_item: Option<Uuid>,
     pub editing: Option<EditingState>,
     pub drill_down_stack: Vec<Uuid>,
+    pub context_menu: Option<ContextMenuState>,
+    pub language_dropdown_open: bool,
 }
 
 impl KanbanView {
@@ -124,6 +151,8 @@ impl KanbanView {
             vi_mode: false,
             line_numbers: false,
             theme_mode: ThemeMode::System,
+            language: Language::Auto,
+            markdown_viewer: crate::viewer::ViewerPreference::Auto,
         });
         Storage::init(&config.data_dir).ok();
         let board = Storage::load_board(&config.data_dir).unwrap_or_default();
@@ -136,13 +165,35 @@ impl KanbanView {
             selected_item: None,
             editing: None,
             drill_down_stack: Vec::new(),
+            context_menu: None,
+            language_dropdown_open: false,
         }
     }
 
+    #[must_use]
+    pub fn main_window_options(cx: &App) -> gpui::WindowOptions {
+        gpui::WindowOptions {
+            window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::centered(
+                None,
+                gpui::size(px(1000.), px(700.)),
+                cx,
+            ))),
+            titlebar: Some(gpui::TitlebarOptions {
+                title: Some("Daily Kanban".into()),
+                appears_transparent: false,
+                traffic_light_position: None,
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[must_use]
     pub fn key_bindings() -> Vec<KeyBinding> {
         vec![
             KeyBinding::new("cmd-n", NewItem, Some("KanbanView")),
             KeyBinding::new("cmd-shift-n", CreateSubItem, Some("KanbanView")),
+            KeyBinding::new("cmd-alt-n", OpenNewMainWindow, Some("KanbanView")),
+            KeyBinding::new("cmd-shift-m", OpenInMarkdownViewer, Some("KanbanView")),
             KeyBinding::new("cmd-w", CloseWindow, Some("KanbanView")),
             KeyBinding::new("cmd-q", Quit, None),
             KeyBinding::new("cmd-,", OpenSettings, None),
@@ -165,6 +216,10 @@ impl KanbanView {
             KeyBinding::new("h", NavLeft, Some("KanbanView")),
             KeyBinding::new("l", NavRight, Some("KanbanView")),
             // Move item shortcuts
+            KeyBinding::new("cmd-up", MoveItemUp, Some("KanbanView")),
+            KeyBinding::new("cmd-down", MoveItemDown, Some("KanbanView")),
+            KeyBinding::new("cmd-k", MoveItemUp, Some("KanbanView")),
+            KeyBinding::new("cmd-j", MoveItemDown, Some("KanbanView")),
             KeyBinding::new("cmd-1", MoveToYesterday, Some("KanbanView")),
             KeyBinding::new("cmd-2", MoveToToday, Some("KanbanView")),
             KeyBinding::new("cmd-3", MoveToThisWeek, Some("KanbanView")),
@@ -199,46 +254,61 @@ impl KanbanView {
         ]
     }
 
-    pub fn menus() -> Vec<Menu> {
+    #[must_use]
+    pub fn menus(lang: Language) -> Vec<Menu> {
         vec![
             Menu::new("dkb").items([
-                MenuItem::action("Settings...", OpenSettings),
+                MenuItem::action(crate::i18n::t("menu.app.settings", lang), OpenSettings),
                 MenuItem::separator(),
-                MenuItem::action("Quit", Quit),
+                MenuItem::action(crate::i18n::t("menu.app.quit", lang), Quit),
             ]),
-            Menu::new("File").items([
-                MenuItem::action("New Item", NewItem),
-                MenuItem::action("New Sub-Item", CreateSubItem),
+            Menu::new(crate::i18n::t("menu.file", lang)).items([
+                MenuItem::action(crate::i18n::t("menu.file.new_item", lang), NewItem),
+                MenuItem::action(crate::i18n::t("menu.file.new_sub_item", lang), CreateSubItem),
+                MenuItem::action(crate::i18n::t("menu.file.new_window", lang), OpenNewMainWindow),
                 MenuItem::separator(),
-                MenuItem::action("Close Window", CloseWindow),
+                MenuItem::action(crate::i18n::t("menu.file.close_window", lang), CloseWindow),
             ]),
-            Menu::new("View").items([
-                MenuItem::action("Backlog", ShowBacklog),
-                MenuItem::action("Active", ShowActive),
-                MenuItem::action("Done", ShowDone),
+            Menu::new(crate::i18n::t("menu.view", lang)).items([
+                MenuItem::action(crate::i18n::t("tab.backlog", lang), ShowBacklog),
+                MenuItem::action(crate::i18n::t("tab.active", lang), ShowActive),
+                MenuItem::action(crate::i18n::t("tab.done", lang), ShowDone),
                 MenuItem::separator(),
-                MenuItem::action("Next Column", NextColumn),
-                MenuItem::action("Previous Column", PrevColumn),
+                MenuItem::action(crate::i18n::t("menu.item.move_right", lang), NextColumn),
+                MenuItem::action(crate::i18n::t("menu.item.move_left", lang), PrevColumn),
             ]),
-            Menu::new("Item").items([
-                MenuItem::action("Open / Edit", OpenSelectedForEdit),
+            Menu::new(crate::i18n::t("menu.item", lang)).items([
+                MenuItem::action(crate::i18n::t("menu.item.open_markdown_viewer", lang), OpenInMarkdownViewer),
+                MenuItem::action(crate::i18n::t("menu.item.open_edit", lang), OpenSelectedForEdit),
                 MenuItem::separator(),
-                MenuItem::action("Move to Backlog", MoveToBacklog),
-                MenuItem::action("Move to Yesterday", MoveToYesterday),
-                MenuItem::action("Move to Today", MoveToToday),
-                MenuItem::action("Move to This Week", MoveToThisWeek),
-                MenuItem::action("Move to Next Week", MoveToNextWeek),
+                MenuItem::action(crate::i18n::t("menu.item.move_up", lang), MoveItemUp),
+                MenuItem::action(crate::i18n::t("menu.item.move_down", lang), MoveItemDown),
                 MenuItem::separator(),
-                MenuItem::action("Mark Done / Reopen", ToggleDone),
+                MenuItem::action(crate::i18n::t("col.backlog", lang), MoveToBacklog),
+                MenuItem::action(crate::i18n::t("col.yesterday", lang), MoveToYesterday),
+                MenuItem::action(crate::i18n::t("col.today", lang), MoveToToday),
+                MenuItem::action(crate::i18n::t("col.this_week", lang), MoveToThisWeek),
+                MenuItem::action(crate::i18n::t("col.next_week", lang), MoveToNextWeek),
                 MenuItem::separator(),
-                MenuItem::action("Delete", DeleteItem),
+                MenuItem::action(crate::i18n::t("menu.item.mark_done", lang), ToggleDone),
+                MenuItem::separator(),
+                MenuItem::action(crate::i18n::t("menu.item.delete", lang), DeleteItem),
+            ]),
+            Menu::new(crate::i18n::t("menu.edit", lang)).items([
+                MenuItem::action(crate::i18n::t("menu.edit.undo", lang), EditorUndo),
+                MenuItem::action(crate::i18n::t("menu.edit.redo", lang), EditorRedo),
+                MenuItem::separator(),
+                MenuItem::action(crate::i18n::t("menu.edit.cut", lang), EditorCut),
+                MenuItem::action(crate::i18n::t("menu.edit.copy", lang), EditorCopy),
+                MenuItem::action(crate::i18n::t("menu.edit.paste", lang), EditorPaste),
+                MenuItem::action(crate::i18n::t("menu.edit.select_all", lang), EditorSelectAll),
             ]),
         ]
     }
 
-    pub fn setup_menus(cx: &mut App) {
+    pub fn setup_menus(cx: &mut App, lang: Language) {
         cx.bind_keys(Self::key_bindings());
-        cx.set_menus(Self::menus());
+        cx.set_menus(Self::menus(lang));
         cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
     }
 
@@ -304,6 +374,10 @@ impl Render for KanbanView {
             .on_action(cx.listener(Self::on_save_editor))
             .on_action(cx.listener(Self::on_cancel_editor))
             .on_action(cx.listener(Self::on_tear_off_editor))
+            .on_action(cx.listener(Self::on_open_new_main_window))
+            .on_action(cx.listener(Self::on_open_in_markdown_viewer))
+            .on_action(cx.listener(Self::on_move_item_up))
+            .on_action(cx.listener(Self::on_move_item_down))
             // Tab bar header
             .child(
                 div()
@@ -321,12 +395,12 @@ impl Render for KanbanView {
                             .flex()
                             .flex_row()
                             .gap(px(4.))
-                            .child(self.render_tab("Backlog", Screen::Backlog, theme, cx))
-                            .child(self.render_tab("Active", Screen::Active, theme, cx))
-                            .child(self.render_tab("Done", Screen::Done, theme, cx)),
+                            .child(self.render_tab(crate::i18n::t("tab.backlog", self.config.language), Screen::Backlog, theme, cx))
+                            .child(self.render_tab(crate::i18n::t("tab.active", self.config.language), Screen::Active, theme, cx))
+                            .child(self.render_tab(crate::i18n::t("tab.done", self.config.language), Screen::Done, theme, cx)),
                     )
                     .child(
-                        self.render_tab("Settings ⌘,", Screen::Settings, theme, cx),
+                        self.render_tab(&format!("{} ⌘,", crate::i18n::t("tab.settings", self.config.language)), Screen::Settings, theme, cx),
                     ),
             )
             // Breadcrumbs bar (if drilled down)
@@ -351,6 +425,12 @@ impl Render for KanbanView {
             )
             // Editor modal
             .child(self.render_editor_modal(theme, cx))
+            // Context menu overlay
+            .children(if self.context_menu.is_some() {
+                Some(self.render_context_menu(theme, cx))
+            } else {
+                None
+            })
     }
 }
 
@@ -359,6 +439,7 @@ impl KanbanView {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         self.current_screen = Screen::Backlog;
         self.drill_down_stack.clear();
         cx.notify();
@@ -368,6 +449,7 @@ impl KanbanView {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         self.current_screen = Screen::Active;
         self.drill_down_stack.clear();
         cx.notify();
@@ -377,6 +459,7 @@ impl KanbanView {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         self.current_screen = Screen::Done;
         self.drill_down_stack.clear();
         cx.notify();
@@ -386,12 +469,52 @@ impl KanbanView {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         self.current_screen = Screen::Settings;
         cx.notify();
     }
 
-    fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Context<Self>) {
-        window.remove_window();
+    pub fn on_open_new_main_window(&mut self, _: &OpenNewMainWindow, _window: &mut Window, cx: &mut Context<Self>) {
+        let opts = Self::main_window_options(cx);
+        let _ = cx.open_window(opts, |_, cx| {
+            cx.new(KanbanView::new)
+        });
+    }
+
+    pub fn on_open_in_markdown_viewer(&mut self, _: &OpenInMarkdownViewer, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing.is_some() {
+            return;
+        }
+        self.context_menu = None;
+        if let Some(id) = self.selected_item {
+            self.open_item_in_markdown_viewer(id);
+        }
+        cx.notify();
+    }
+
+    pub fn open_item_in_markdown_viewer(&self, id: Uuid) {
+        if let Some(loc) = self.board.find_item_location(&id) {
+            let file_path = self
+                .config
+                .data_dir
+                .join(loc.to_path())
+                .join(format!("{id}.md"));
+            if let Err(e) = crate::viewer::open_in_viewer(&file_path, &self.config.markdown_viewer) {
+                eprintln!("Failed to open in markdown viewer: {e}");
+            }
+        }
+    }
+
+    pub fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, cx: &mut Context<Self>) {
+        if self.context_menu.is_some() {
+            self.context_menu = None;
+            cx.notify();
+        } else if self.editing.is_some() {
+            self.editing = None;
+            cx.notify();
+        } else {
+            window.remove_window();
+        }
     }
 
     fn get_columns_for_current_screen(&self) -> Vec<(&'static str, Location, Vec<Item>)> {
@@ -614,7 +737,7 @@ impl KanbanView {
         }
     }
 
-    fn move_selected_to(&mut self, location: Location, cx: &mut Context<Self>) {
+    pub fn move_selected_to(&mut self, location: Location, cx: &mut Context<Self>) {
         if self.editing.is_some() {
             return;
         }
@@ -660,7 +783,61 @@ impl KanbanView {
         self.move_selected_to(Location::Backlog, cx);
     }
 
-    fn on_toggle_done(&mut self, _: &ToggleDone, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_move_item_up(&mut self, _: &MoveItemUp, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing.is_some() {
+            return;
+        }
+        let Some(id) = self.selected_item else {
+            return;
+        };
+        let Some(loc) = self.board.find_item_location(&id) else {
+            return;
+        };
+        let mut ordered_ids = self.get_column_item_ids(loc);
+        if let Some(pos) = ordered_ids.iter().position(|&x| x == id)
+            && pos > 0
+        {
+            ordered_ids.swap(pos, pos - 1);
+            self.board.set_column_order(&loc, ordered_ids);
+            let _ = Storage::save_board_state(&self.config.data_dir, &self.board);
+            cx.notify();
+        }
+    }
+
+    pub fn on_move_item_down(&mut self, _: &MoveItemDown, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing.is_some() {
+            return;
+        }
+        let Some(id) = self.selected_item else {
+            return;
+        };
+        let Some(loc) = self.board.find_item_location(&id) else {
+            return;
+        };
+        let mut ordered_ids = self.get_column_item_ids(loc);
+        if let Some(pos) = ordered_ids.iter().position(|&x| x == id)
+            && pos + 1 < ordered_ids.len()
+        {
+            ordered_ids.swap(pos, pos + 1);
+            self.board.set_column_order(&loc, ordered_ids);
+            let _ = Storage::save_board_state(&self.config.data_dir, &self.board);
+            cx.notify();
+        }
+    }
+
+    fn get_column_item_ids(&self, location: Location) -> Vec<Uuid> {
+        match location {
+            Location::Backlog => self.board.backlog.iter().map(|i| i.id).collect(),
+            Location::Active(Category::Yesterday) => self.board.active.yesterday.iter().map(|i| i.id).collect(),
+            Location::Active(Category::Today) => self.board.active.today.iter().map(|i| i.id).collect(),
+            Location::Active(Category::ThisWeek) => self.board.active.this_week.iter().map(|i| i.id).collect(),
+            Location::Active(Category::NextWeek) => self.board.active.next_week.iter().map(|i| i.id).collect(),
+            Location::Done => self.board.done.iter().map(|i| i.id).collect(),
+        }
+    }
+
+    pub fn on_toggle_done(&mut self, _: &ToggleDone, _window: &mut Window, cx: &mut Context<Self>) {
+        self.context_menu = None;
         let Some(id) = self.selected_item else {
             return;
         };
@@ -675,10 +852,11 @@ impl KanbanView {
         self.move_selected_to(target, cx);
     }
 
-    fn on_delete_item(&mut self, _: &DeleteItem, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_delete_item(&mut self, _: &DeleteItem, _window: &mut Window, cx: &mut Context<Self>) {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         let Some(id) = self.selected_item else {
             return;
         };
@@ -757,23 +935,59 @@ impl KanbanView {
 
     // -- Item editor --
 
-    fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
         if self.editing.is_some() {
             return;
         }
+        self.context_menu = None;
         let editor = cx.new(|cx| ItemEditor::new(cx, "", None, true, self.config.clone(), false));
-        self.editing = Some(EditingState { editor });
+        let subscription = cx.subscribe(&editor, |this, _editor, event: &EditorEvent, cx| {
+            match event {
+                EditorEvent::Close => {
+                    this.editing = None;
+                    cx.notify();
+                }
+                EditorEvent::Save => {
+                    if let Ok(board) = Storage::load_board(&this.config.data_dir) {
+                        this.board = board;
+                    }
+                    cx.notify();
+                }
+            }
+        });
+        self.editing = Some(EditingState {
+            editor,
+            subscription: Some(subscription),
+        });
         cx.notify();
     }
 
-    fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
+    pub fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
+        self.context_menu = None;
         let body = self.board.find_item(&id).map(|i| i.body.clone()).unwrap_or_default();
         let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id), false, self.config.clone(), false));
-        self.editing = Some(EditingState { editor });
+        let subscription = cx.subscribe(&editor, |this, _editor, event: &EditorEvent, cx| {
+            match event {
+                EditorEvent::Close => {
+                    this.editing = None;
+                    cx.notify();
+                }
+                EditorEvent::Save => {
+                    if let Ok(board) = Storage::load_board(&this.config.data_dir) {
+                        this.board = board;
+                    }
+                    cx.notify();
+                }
+            }
+        });
+        self.editing = Some(EditingState {
+            editor,
+            subscription: Some(subscription),
+        });
         cx.notify();
     }
 
-    fn on_save_editor(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_save_editor(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(editing) = self.editing.take() else {
             return;
         };
@@ -814,12 +1028,12 @@ impl KanbanView {
         cx.notify();
     }
 
-    fn on_cancel_editor(&mut self, _: &CancelEditor, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_cancel_editor(&mut self, _: &CancelEditor, _window: &mut Window, cx: &mut Context<Self>) {
         self.editing = None;
         cx.notify();
     }
 
-    fn on_tear_off_editor(&mut self, _: &TearOffEditor, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_tear_off_editor(&mut self, _: &TearOffEditor, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(editing) = self.editing.take() else {
             return;
         };
@@ -914,6 +1128,15 @@ impl KanbanView {
         };
 
         if from == target_location {
+            let mut ordered_ids = self.get_column_item_ids(target_location);
+            if let Some(pos) = ordered_ids.iter().position(|&x| x == dragged_id) {
+                ordered_ids.remove(pos);
+                ordered_ids.push(dragged_id);
+                self.board.set_column_order(&target_location, ordered_ids);
+                let _ = Storage::save_board_state(&self.config.data_dir, &self.board);
+                self.selected_item = Some(dragged_id);
+                cx.notify();
+            }
             return;
         }
 
@@ -1072,10 +1295,22 @@ impl KanbanView {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    this.context_menu = None;
                     this.selected_item = Some(item_id);
                     if event.click_count >= 2 {
                         this.open_editor_for_item(item_id, cx);
                     }
+                    cx.notify();
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    this.selected_item = Some(item_id);
+                    this.context_menu = Some(ContextMenuState {
+                        item_id,
+                        position: event.position,
+                    });
                     cx.notify();
                 }),
             )
@@ -1216,7 +1451,13 @@ impl KanbanView {
             .flex_row()
             .flex_1()
             .p(px(8.))
-            .child(self.render_column("Backlog", Location::Backlog, &self.board.backlog, theme, cx))
+            .child(self.render_column(
+                crate::i18n::t("col.backlog", self.config.language),
+                Location::Backlog,
+                &self.board.backlog,
+                theme,
+                cx,
+            ))
     }
 
     fn render_active_screen(&self, theme: Theme, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1230,7 +1471,13 @@ impl KanbanView {
                 .flex_row()
                 .flex_1()
                 .p(px(8.))
-                .child(self.render_column("Sub-Items", Location::Active(Category::Today), &sub_items, theme, cx));
+                .child(self.render_column(
+                    crate::i18n::t("col.sub_items", self.config.language),
+                    Location::Active(Category::Today),
+                    &sub_items,
+                    theme,
+                    cx,
+                ));
         }
 
         div()
@@ -1238,10 +1485,34 @@ impl KanbanView {
             .flex_row()
             .flex_1()
             .p(px(4.))
-            .child(self.render_column("Yesterday", Location::Active(Category::Yesterday), &self.board.active.yesterday, theme, cx))
-            .child(self.render_column("Today", Location::Active(Category::Today), &self.board.active.today, theme, cx))
-            .child(self.render_column("This Week", Location::Active(Category::ThisWeek), &self.board.active.this_week, theme, cx))
-            .child(self.render_column("Next Week", Location::Active(Category::NextWeek), &self.board.active.next_week, theme, cx))
+            .child(self.render_column(
+                crate::i18n::t("col.yesterday", self.config.language),
+                Location::Active(Category::Yesterday),
+                &self.board.active.yesterday,
+                theme,
+                cx,
+            ))
+            .child(self.render_column(
+                crate::i18n::t("col.today", self.config.language),
+                Location::Active(Category::Today),
+                &self.board.active.today,
+                theme,
+                cx,
+            ))
+            .child(self.render_column(
+                crate::i18n::t("col.this_week", self.config.language),
+                Location::Active(Category::ThisWeek),
+                &self.board.active.this_week,
+                theme,
+                cx,
+            ))
+            .child(self.render_column(
+                crate::i18n::t("col.next_week", self.config.language),
+                Location::Active(Category::NextWeek),
+                &self.board.active.next_week,
+                theme,
+                cx,
+            ))
     }
 
     fn render_done_screen(&self, theme: Theme, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1250,7 +1521,13 @@ impl KanbanView {
             .flex_row()
             .flex_1()
             .p(px(8.))
-            .child(self.render_column("Done", Location::Done, &self.board.done, theme, cx))
+            .child(self.render_column(
+                crate::i18n::t("col.done", self.config.language),
+                Location::Done,
+                &self.board.done,
+                theme,
+                cx,
+            ))
     }
 
     fn render_settings_screen(&self, theme: Theme, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1263,6 +1540,7 @@ impl KanbanView {
             .flex()
             .flex_col()
             .flex_1()
+            .overflow_hidden()
             .p(px(24.))
             .gap(px(16.))
             .bg(theme.bg_surface)
@@ -1271,7 +1549,7 @@ impl KanbanView {
                     .text_lg()
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(theme.text_primary)
-                    .child("Settings"),
+                    .child(crate::i18n::t("settings.title", self.config.language)),
             )
             // Theme Mode Selector
             .child(
@@ -1284,16 +1562,34 @@ impl KanbanView {
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.text_primary)
-                            .child("Appearance / Theme Mode"),
+                            .child(crate::i18n::t("settings.appearance", self.config.language)),
                     )
                     .child(
                         div()
                             .flex()
                             .flex_row()
                             .gap(px(8.))
-                            .child(self.render_theme_option("System", ThemeMode::System, theme_mode, theme, cx))
-                            .child(self.render_theme_option("Light", ThemeMode::Light, theme_mode, theme, cx))
-                            .child(self.render_theme_option("Dark", ThemeMode::Dark, theme_mode, theme, cx)),
+                            .child(self.render_theme_option(
+                                crate::i18n::t("settings.theme_system", self.config.language),
+                                ThemeMode::System,
+                                theme_mode,
+                                theme,
+                                cx,
+                            ))
+                            .child(self.render_theme_option(
+                                crate::i18n::t("settings.theme_light", self.config.language),
+                                ThemeMode::Light,
+                                theme_mode,
+                                theme,
+                                cx,
+                            ))
+                            .child(self.render_theme_option(
+                                crate::i18n::t("settings.theme_dark", self.config.language),
+                                ThemeMode::Dark,
+                                theme_mode,
+                                theme,
+                                cx,
+                            )),
                     ),
             )
             // Vi Mode Toggle
@@ -1308,21 +1604,10 @@ impl KanbanView {
                     .border_color(theme.border)
                     .child(
                         div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme.text_primary)
-                                    .child("Vi Mode Navigation & Editing"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(theme.text_secondary)
-                                    .child("Enable modal vi navigation (hjkl) in kanban view and editor"),
-                            ),
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(crate::i18n::t("settings.vi_mode", self.config.language)),
                     )
                     .child(
                         div()
@@ -1363,7 +1648,7 @@ impl KanbanView {
                                     .text_sm()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_color(theme.text_primary)
-                                    .child("Editor Line Numbers"),
+                                    .child(crate::i18n::t("settings.line_numbers", self.config.language)),
                             )
                             .child(
                                 div()
@@ -1392,6 +1677,205 @@ impl KanbanView {
                             .child(if line_numbers { "Enabled" } else { "Disabled" }),
                     ),
             )
+            // Language Selection Section
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(crate::i18n::t("settings.language", self.config.language)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            // Dropdown Trigger Button
+                            .child(
+                                div()
+                                    .id("language-dropdown-trigger")
+                                    .flex()
+                                    .flex_row()
+                                    .justify_between()
+                                    .items_center()
+                                    .w(px(300.))
+                                    .px(px(12.))
+                                    .py(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(theme.bg_column)
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .text_sm()
+                                    .text_color(theme.text_primary)
+                                    .cursor_pointer()
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, _, _window, cx| {
+                                            this.language_dropdown_open = !this.language_dropdown_open;
+                                            cx.notify();
+                                        }),
+                                    )
+                                    .child(self.config.language.display_name())
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.text_secondary)
+                                            .child(if self.language_dropdown_open { "▲" } else { "▼" }),
+                                    ),
+                            )
+                            // Dropdown List
+                            .children(if self.language_dropdown_open {
+                                let mut lang_items: Vec<gpui::AnyElement> = Vec::new();
+                                for &lang in Language::all() {
+                                    let is_active = lang == self.config.language;
+                                    lang_items.push(
+                                        div()
+                                            .id(SharedString::from(format!("lang-opt-{}", lang.code())))
+                                            .flex()
+                                            .flex_row()
+                                            .justify_between()
+                                            .items_center()
+                                            .px(px(12.))
+                                            .py(px(6.))
+                                            .rounded(px(3.))
+                                            .bg(if is_active { theme.bg_column } else { theme.bg_surface })
+                                            .text_sm()
+                                            .text_color(if is_active { theme.accent } else { theme.text_primary })
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _, _window, cx| {
+                                                    this.config.language = lang;
+                                                    this.language_dropdown_open = false;
+                                                    let _ = this.config.save_to(&Config::config_file_path());
+                                                    Self::setup_menus(cx, this.config.language);
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child(lang.display_name())
+                                            .children(if is_active {
+                                                Some(div().text_xs().text_color(theme.accent).child("✓"))
+                                            } else {
+                                                None
+                                            })
+                                            .into_any_element(),
+                                    );
+                                }
+                                Some(
+                                    div()
+                                        .id("language-dropdown-list")
+                                        .w(px(300.))
+                                        .max_h(px(220.))
+                                        .overflow_scroll()
+                                        .p(px(4.))
+                                        .rounded(px(6.))
+                                        .bg(theme.bg_surface)
+                                        .border_1()
+                                        .border_color(theme.border)
+                                        .shadow_md()
+                                        .children(lang_items),
+                                )
+                            } else {
+                                None
+                            }),
+                    ),
+            )
+            // Markdown Viewer Section
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(crate::i18n::t("settings.markdown_viewer", self.config.language)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            .p(px(8.))
+                            .rounded(px(4.))
+                            .bg(theme.bg_column)
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.text_secondary)
+                                    .child(match &self.config.markdown_viewer {
+                                        crate::viewer::ViewerPreference::Auto => {
+                                            if let Some(detected) = crate::viewer::detect_default_viewer() {
+                                                format!("Auto-Detect ({})", detected.display())
+                                            } else {
+                                                "Auto-Detect (System Default)".to_string()
+                                            }
+                                        }
+                                        crate::viewer::ViewerPreference::Custom(path) => {
+                                            format!("Custom ({})", path.display())
+                                        }
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap(px(8.))
+                                    .child(
+                                        div()
+                                            .px(px(10.))
+                                            .py(px(4.))
+                                            .rounded(px(4.))
+                                            .bg(theme.bg_surface)
+                                            .border_1()
+                                            .border_color(theme.border)
+                                            .text_xs()
+                                            .text_color(theme.text_primary)
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _, _window, cx| {
+                                                    if let Some(path) = crate::viewer::pick_viewer_file_dialog() {
+                                                        this.config.markdown_viewer = crate::viewer::ViewerPreference::Custom(path);
+                                                        let _ = this.config.save_to(&Config::config_file_path());
+                                                        cx.notify();
+                                                    }
+                                                }),
+                                            )
+                                            .child(crate::i18n::t("settings.browse", self.config.language)),
+                                    )
+                                    .child(
+                                        div()
+                                            .px(px(10.))
+                                            .py(px(4.))
+                                            .rounded(px(4.))
+                                            .bg(theme.bg_surface)
+                                            .border_1()
+                                            .border_color(theme.border)
+                                            .text_xs()
+                                            .text_color(theme.text_primary)
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _, _window, cx| {
+                                                    this.config.markdown_viewer = crate::viewer::ViewerPreference::Auto;
+                                                    let _ = this.config.save_to(&Config::config_file_path());
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child(crate::i18n::t("settings.reset_auto", self.config.language)),
+                                    ),
+                            ),
+                    ),
+            )
             // Storage Directory
             .child(
                 div()
@@ -1403,7 +1887,7 @@ impl KanbanView {
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.text_primary)
-                            .child("Storage Directory"),
+                            .child(crate::i18n::t("settings.storage_dir", self.config.language)),
                     )
                     .child(
                         div()
@@ -1485,11 +1969,14 @@ impl KanbanView {
                                         .cursor_pointer()
                                         .text_color(theme.text_secondary)
                                         .child("\u{29C9}")
-                                        .tooltip(move |_, cx| {
-                                            cx.new(|_| TextTooltip {
-                                                text: "tear off window".into(),
-                                            })
-                                            .into()
+                                        .tooltip({
+                                            let tear_off_tooltip = crate::i18n::t("editor.tear_off", self.config.language);
+                                            move |_, cx| {
+                                                cx.new(|_| TextTooltip {
+                                                    text: tear_off_tooltip.into(),
+                                                })
+                                                .into()
+                                            }
                                         })
                                         .on_mouse_down(
                                             MouseButton::Left,
@@ -1497,7 +1984,7 @@ impl KanbanView {
                                                 this.on_tear_off_editor(&TearOffEditor, window, cx);
                                             }),
                                         ),
-                                    ),
+                                ),
                         )
                         // Editor content area
                         .child(
@@ -1530,7 +2017,7 @@ impl KanbanView {
                                                 this.on_save_editor(&SaveEditor, window, cx);
                                             }),
                                         )
-                                        .child("Save"),
+                                        .child(crate::i18n::t("editor.save", self.config.language)),
                                 )
                                 .child(
                                     div()
@@ -1549,12 +2036,184 @@ impl KanbanView {
                                                 this.on_cancel_editor(&CancelEditor, window, cx);
                                             }),
                                         )
-                                        .child("Cancel"),
+                                        .child(crate::i18n::t("editor.cancel", self.config.language)),
                                 ),
                         ),
                 )
         } else {
             div()
         }
+    }
+
+    fn render_context_menu(&self, theme: Theme, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(ref menu_state) = self.context_menu else {
+            return div().into_any_element();
+        };
+        let item_id = menu_state.item_id;
+        let position = menu_state.position;
+
+        let item_loc = self.board.find_item_location(&item_id);
+
+        let mut menu = div()
+            .id("context-menu-popup")
+            .absolute()
+            .left(position.x)
+            .top(position.y)
+            .w(px(200.))
+            .bg(theme.bg_surface)
+            .border_1()
+            .border_color(theme.border)
+            .rounded(px(6.))
+            .shadow_lg()
+            .p(px(4.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(
+                self.render_context_menu_item(crate::i18n::t("menu.item.open_markdown_viewer", self.config.language), theme, cx, move |this, _window, cx| {
+                    this.context_menu = None;
+                    this.open_item_in_markdown_viewer(item_id);
+                    cx.notify();
+                }),
+            )
+            .child(
+                self.render_context_menu_item(crate::i18n::t("menu.item.open_edit", self.config.language), theme, cx, move |this, _window, cx| {
+                    this.context_menu = None;
+                    this.open_editor_for_item(item_id, cx);
+                    cx.notify();
+                }),
+            );
+
+        match item_loc {
+            Some(Location::Done) => {
+                menu = menu
+                    .child(
+                        self.render_context_menu_item(crate::i18n::t("menu.item.move_today", self.config.language), theme, cx, move |this, _window, cx| {
+                            this.context_menu = None;
+                            this.selected_item = Some(item_id);
+                            this.move_selected_to(Location::Active(Category::Today), cx);
+                        }),
+                    )
+                    .child(
+                        self.render_context_menu_item(crate::i18n::t("menu.item.move_backlog", self.config.language), theme, cx, move |this, _window, cx| {
+                            this.context_menu = None;
+                            this.selected_item = Some(item_id);
+                            this.move_selected_to(Location::Backlog, cx);
+                        }),
+                    );
+            }
+            Some(Location::Active(_)) => {
+                menu = menu
+                    .child(
+                        self.render_context_menu_item(crate::i18n::t("menu.item.move_backlog", self.config.language), theme, cx, move |this, _window, cx| {
+                            this.context_menu = None;
+                            this.selected_item = Some(item_id);
+                            this.move_selected_to(Location::Backlog, cx);
+                        }),
+                    )
+                    .child(
+                        self.render_context_menu_item(crate::i18n::t("menu.item.mark_done", self.config.language), theme, cx, move |this, window, cx| {
+                            this.context_menu = None;
+                            this.selected_item = Some(item_id);
+                            this.on_toggle_done(&ToggleDone, window, cx);
+                        }),
+                    );
+            }
+            Some(Location::Backlog) => {
+                menu = menu
+                    .child(
+                        self.render_context_menu_item(crate::i18n::t("menu.item.move_today", self.config.language), theme, cx, move |this, _window, cx| {
+                            this.context_menu = None;
+                            this.selected_item = Some(item_id);
+                            this.move_selected_to(Location::Active(Category::Today), cx);
+                        }),
+                    );
+            }
+            None => {}
+        }
+
+        menu = menu
+            .child(
+                self.render_context_menu_item(crate::i18n::t("menu.item.move_up", self.config.language), theme, cx, move |this, window, cx| {
+                    this.context_menu = None;
+                    this.selected_item = Some(item_id);
+                    this.on_move_item_up(&MoveItemUp, window, cx);
+                }),
+            )
+            .child(
+                self.render_context_menu_item(crate::i18n::t("menu.item.move_down", self.config.language), theme, cx, move |this, window, cx| {
+                    this.context_menu = None;
+                    this.selected_item = Some(item_id);
+                    this.on_move_item_down(&MoveItemDown, window, cx);
+                }),
+            );
+
+        menu = menu.child(
+            self.render_context_menu_item(crate::i18n::t("menu.item.delete", self.config.language), theme, cx, move |this, window, cx| {
+                this.context_menu = None;
+                this.selected_item = Some(item_id);
+                this.on_delete_item(&DeleteItem, window, cx);
+            }),
+        );
+
+        div()
+            .id("context-menu-container")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .child(
+                div()
+                    .id("context-menu-backdrop")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _window, cx| {
+                            this.context_menu = None;
+                            cx.notify();
+                        }),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(|this, _, _window, cx| {
+                            this.context_menu = None;
+                            cx.notify();
+                        }),
+                    ),
+            )
+            .child(menu)
+            .into_any_element()
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_context_menu_item<F>(
+        &self,
+        label: &'static str,
+        theme: Theme,
+        cx: &mut Context<Self>,
+        on_click: F,
+    ) -> impl IntoElement
+    where
+        F: Fn(&mut KanbanView, &mut Window, &mut Context<KanbanView>) + 'static,
+    {
+        div()
+            .id(SharedString::from(format!("context-menu-item-{label}")))
+            .px(px(8.))
+            .py(px(6.))
+            .rounded(px(4.))
+            .text_sm()
+            .text_color(theme.text_primary)
+            .cursor_pointer()
+            .hover(|style| style.bg(theme.bg_column))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, window, cx| {
+                    on_click(this, window, cx);
+                }),
+            )
+            .child(label)
     }
 }
