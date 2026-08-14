@@ -120,7 +120,7 @@ impl Focusable for KanbanView {
 }
 
 impl Render for KanbanView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let screen = self.current_screen;
         div()
             .flex()
@@ -128,6 +128,10 @@ impl Render for KanbanView {
             .bg(rgb(0xf5f5f5))
             .size_full()
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(Self::on_show_backlog))
+            .on_action(cx.listener(Self::on_show_active))
+            .on_action(cx.listener(Self::on_show_done))
+            .on_action(cx.listener(Self::on_close_window))
             .child(
                 div()
                     .flex()
@@ -135,9 +139,9 @@ impl Render for KanbanView {
                     .gap(px(4.))
                     .p(px(8.))
                     .bg(rgb(0xe0e0e0))
-                    .child(self.render_tab("Backlog", Screen::Backlog))
-                    .child(self.render_tab("Active", Screen::Active))
-                    .child(self.render_tab("Done", Screen::Done)),
+                    .child(self.render_tab("Backlog", Screen::Backlog, cx))
+                    .child(self.render_tab("Active", Screen::Active, cx))
+                    .child(self.render_tab("Done", Screen::Done, cx)),
             )
             .child(
                 div()
@@ -153,7 +157,26 @@ impl Render for KanbanView {
 }
 
 impl KanbanView {
-    fn render_tab(&self, label: &str, screen: Screen) -> impl IntoElement {
+    fn on_show_backlog(&mut self, _: &ShowBacklog, _window: &mut Window, cx: &mut Context<Self>) {
+        self.current_screen = Screen::Backlog;
+        cx.notify();
+    }
+
+    fn on_show_active(&mut self, _: &ShowActive, _window: &mut Window, cx: &mut Context<Self>) {
+        self.current_screen = Screen::Active;
+        cx.notify();
+    }
+
+    fn on_show_done(&mut self, _: &ShowDone, _window: &mut Window, cx: &mut Context<Self>) {
+        self.current_screen = Screen::Done;
+        cx.notify();
+    }
+
+    fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Context<Self>) {
+        window.remove_window();
+    }
+
+    fn render_tab(&self, label: &str, screen: Screen, cx: &mut Context<Self>) -> impl IntoElement {
         let is_active = self.current_screen == screen;
         div()
             .px(px(12.))
@@ -162,6 +185,14 @@ impl KanbanView {
             .bg(if is_active { rgb(0xffffff) } else { rgb(0xe0e0e0) })
             .text_sm()
             .text_color(rgb(0x333333))
+            .cursor_pointer()
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, _, _window, cx| {
+                    this.current_screen = screen;
+                    cx.notify();
+                }),
+            )
             .child(label.to_string())
     }
 }
