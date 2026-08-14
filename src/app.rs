@@ -1,10 +1,12 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Context, FocusHandle, Focusable, KeyBinding, Menu, MenuItem, Render, Window,
-    actions, div, prelude::*, px, rgb,
-    ClipboardItem, EntityInputHandler, MouseButton, UTF16Selection,
-    Bounds, Pixels,
+    App, Context, FocusHandle, Focusable, GlobalElementId, KeyBinding, Menu, MenuItem, Render,
+    Window, actions, div, prelude::*, px, rgb,
+    ClipboardItem, Element, ElementId, ElementInputHandler, Entity, EntityInputHandler,
+    InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, Pixels, Point,
+    SharedString, Style, TextRun, TextAlign, UTF16Selection,
+    relative, rgba,
 };
 
 use crate::board::Board;
@@ -233,10 +235,10 @@ impl EntityInputHandler for ItemEditor {
     fn bounds_for_range(
         &mut self,
         _range_utf16: Range<usize>,
-        _bounds: Bounds<Pixels>,
+        _bounds: gpui::Bounds<Pixels>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
-    ) -> Option<Bounds<Pixels>> {
+    ) -> Option<gpui::Bounds<Pixels>> {
         None
     }
 
@@ -250,10 +252,203 @@ impl EntityInputHandler for ItemEditor {
     }
 }
 
+// -- Custom Element for text input rendering --
+// This is REQUIRED for GPUI to route keyboard input to the EntityInputHandler.
+// Without calling window.handle_input() during paint, no text entry occurs.
+
+struct EditorElement {
+    editor: Entity<ItemEditor>,
+}
+
+struct EditorPrepaintState {
+    lines: Vec<gpui::WrappedLine>,
+    cursor: Option<gpui::PaintQuad>,
+    selection: Option<gpui::PaintQuad>,
+}
+
+impl IntoElement for EditorElement {
+    type Element = Self;
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for EditorElement {
+    type RequestLayoutState = ();
+    type PrepaintState = EditorPrepaintState;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let mut style = Style::default();
+        style.size.width = relative(1.).into();
+        style.size.height = relative(1.).into();
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        bounds: gpui::Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let editor = self.editor.read(cx);
+        let content: SharedString = editor.state.content().to_string().into();
+        let selected_range = editor.state.selected_range();
+        let cursor_offset = editor.state.cursor_offset();
+        let style = window.text_style();
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        let line_height = window.line_height();
+        let wrap_width = bounds.size.width;
+
+        if content.is_empty() {
+            return EditorPrepaintState {
+                lines: Vec::new(),
+                cursor: Some(gpui::fill(
+                    gpui::Bounds::new(
+                        Point::new(bounds.left(), bounds.top()),
+                        gpui::size(px(2.), line_height),
+                    ),
+                    gpui::blue(),
+                )),
+                selection: None,
+            };
+        }
+
+        let run = TextRun {
+            len: content.len(),
+            font: style.font(),
+            color: style.color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+
+        let Ok(lines) = window.text_system().shape_text(
+            content,
+            font_size,
+            &[run],
+            Some(wrap_width),
+            None,
+        ) else {
+            return EditorPrepaintState {
+                lines: Vec::new(),
+                cursor: None,
+                selection: None,
+            };
+        };
+
+        // Calculate cursor position from the first line
+        let cursor = if let Some(first_line) = lines.first() {
+            let cursor_pos = first_line.position_for_index(cursor_offset, line_height);
+            cursor_pos.map(|p| {
+                gpui::fill(
+                    gpui::Bounds::new(
+                        Point::new(bounds.left() + p.x, bounds.top() + p.y),
+                        gpui::size(px(2.), line_height),
+                    ),
+                    gpui::blue(),
+                )
+            })
+        } else {
+            None
+        };
+
+        // Selection highlight on first line (simplified for multi-line)
+        let selection = if !selected_range.is_empty() {
+            if let Some(first_line) = lines.first() {
+                let start_x = first_line
+                    .position_for_index(selected_range.start, line_height)
+                    .map(|p| p.x)
+                    .unwrap_or(px(0.));
+                let end_x = first_line
+                    .position_for_index(selected_range.end, line_height)
+                    .map(|p| p.x)
+                    .unwrap_or(bounds.size.width);
+                Some(gpui::fill(
+                    gpui::Bounds::from_corners(
+                        Point::new(bounds.left() + start_x, bounds.top()),
+                        Point::new(bounds.left() + end_x, bounds.top() + line_height),
+                    ),
+                    rgba(0x3311ff30),
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        EditorPrepaintState {
+            lines: lines.into_iter().collect(),
+            cursor,
+            selection,
+        }
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        bounds: gpui::Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let focus_handle = self.editor.read(cx).focus_handle.clone();
+
+        // THIS IS THE CRITICAL CALL — registers with GPUI's input system
+        window.handle_input(
+            &focus_handle,
+            ElementInputHandler::new(bounds, self.editor.clone()),
+            cx,
+        );
+
+        if let Some(selection) = prepaint.selection.take() {
+            window.paint_quad(selection);
+        }
+
+        let line_height = window.line_height();
+        let mut y = bounds.top();
+        for line in &prepaint.lines {
+            line.paint(
+                Point::new(bounds.left(), y),
+                line_height,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            )
+            .ok();
+            y += line.size(line_height).height;
+        }
+
+        if focus_handle.is_focused(window)
+            && let Some(cursor) = prepaint.cursor.take()
+        {
+            window.paint_quad(cursor);
+        }
+    }
+}
+
 impl Render for ItemEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content: gpui::SharedString = self.state.content().to_string().into();
-
         div()
             .flex()
             .flex_col()
@@ -261,6 +456,7 @@ impl Render for ItemEditor {
             .bg(rgb(0xffffff))
             .track_focus(&self.focus_handle)
             .key_context("ItemEditor")
+            .cursor(gpui::CursorStyle::IBeam)
             .on_action(cx.listener(Self::on_backspace))
             .on_action(cx.listener(Self::on_delete))
             .on_action(cx.listener(Self::on_left))
@@ -279,7 +475,9 @@ impl Render for ItemEditor {
                     .p(px(16.))
                     .text_sm()
                     .text_color(rgb(0x333333))
-                    .child(content),
+                    .child(EditorElement {
+                        editor: cx.entity(),
+                    }),
             )
     }
 }
@@ -290,6 +488,25 @@ pub struct EditingState {
     pub editor: gpui::Entity<ItemEditor>,
     pub is_new: bool,
     pub item_id: Option<Uuid>,
+}
+
+// -- Simple tooltip view --
+
+struct TextTooltip {
+    text: SharedString,
+}
+
+impl Render for TextTooltip {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(6.))
+            .py(px(3.))
+            .rounded(px(3.))
+            .bg(rgb(0x333333))
+            .text_xs()
+            .text_color(rgb(0xffffff))
+            .child(self.text.clone())
+    }
 }
 
 // -- KanbanView --
@@ -338,7 +555,6 @@ impl KanbanView {
             KeyBinding::new("delete", DeleteItem, None),
             KeyBinding::new("tab", NextItem, None),
             KeyBinding::new("shift-tab", PrevItem, None),
-            // Editor keybindings (scoped to ItemEditor context)
             KeyBinding::new("escape", CancelEditor, Some("ItemEditor")),
             KeyBinding::new("cmd-s", SaveEditor, Some("ItemEditor")),
             KeyBinding::new("backspace", EditorBackspace, Some("ItemEditor")),
@@ -730,17 +946,12 @@ impl KanbanView {
             .cursor_pointer()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, _, _window, cx| {
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
                     this.selected_item = Some(item_id);
-                    cx.notify();
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
                     if event.click_count >= 2 {
                         this.open_editor_for_item(item_id, cx);
                     }
+                    cx.notify();
                 }),
             )
             .child(
@@ -832,7 +1043,7 @@ impl KanbanView {
                 .top_0()
                 .left_0()
                 .size_full()
-                .bg(gpui::rgba(0x00000040))
+                .bg(rgba(0x00000040))
                 .flex()
                 .justify_center()
                 .items_center()
@@ -845,11 +1056,45 @@ impl KanbanView {
                         .flex()
                         .flex_col()
                         .overflow_hidden()
+                        // Top bar with tear-off button (top-right corner)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .justify_end()
+                                .p(px(4.))
+                                .bg(rgb(0xf5f5f5))
+                                .border_b_1()
+                                .border_color(rgb(0xe0e0e0))
+                                .child(
+                                    div()
+                                        .id("tear-off")
+                                        .px(px(8.))
+                                        .py(px(4.))
+                                        .cursor_pointer()
+                                        .text_color(rgb(0x666666))
+                                        .child("\u{29C9}")
+                                        .tooltip(move |_, cx| {
+                                            cx.new(|_| TextTooltip {
+                                                text: "tear off window".into(),
+                                            })
+                                            .into()
+                                        })
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_tear_off_editor(&TearOffEditor, window, cx);
+                                            }),
+                                        ),
+                                ),
+                        )
+                        // Editor content area
                         .child(
                             div()
                                 .flex_1()
                                 .child(editing.editor.clone()),
                         )
+                        // Bottom button bar: Save and Cancel
                         .child(
                             div()
                                 .flex()
@@ -893,24 +1138,6 @@ impl KanbanView {
                                             }),
                                         )
                                         .child("Cancel"),
-                                )
-                                .child(
-                                    div()
-                                        .px(px(12.))
-                                        .py(px(6.))
-                                        .rounded(px(4.))
-                                        .bg(rgb(0xffffff))
-                                        .border_1()
-                                        .border_color(rgb(0xcccccc))
-                                        .text_sm()
-                                        .cursor_pointer()
-                                        .child("\u{29A2}")
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(|this, _, window, cx| {
-                                                this.on_tear_off_editor(&TearOffEditor, window, cx);
-                                            }),
-                                        ),
                                 ),
                         ),
                 )
