@@ -1,12 +1,17 @@
+use std::ops::Range;
+
 use gpui::{
     App, Context, FocusHandle, Focusable, KeyBinding, Menu, MenuItem, Render, Window,
     actions, div, prelude::*, px, rgb,
+    ClipboardItem, EntityInputHandler, MouseButton, UTF16Selection,
+    Bounds, Pixels,
 };
 
 use crate::board::Board;
 use crate::config::Config;
 use crate::item::{Category, Item, Status};
 use crate::storage::{Location, Storage};
+use crate::text_input::TextInputState;
 use uuid::Uuid;
 
 actions!(
@@ -27,6 +32,27 @@ actions!(
         ShowDone,
         NextItem,
         PrevItem,
+        SaveEditor,
+        CancelEditor,
+        TearOffEditor,
+    ]
+);
+
+actions!(
+    dkb_editor,
+    [
+        EditorBackspace,
+        EditorDelete,
+        EditorLeft,
+        EditorRight,
+        EditorSelectLeft,
+        EditorSelectRight,
+        EditorSelectAll,
+        EditorUndo,
+        EditorRedo,
+        EditorPaste,
+        EditorCut,
+        EditorCopy,
     ]
 );
 
@@ -37,13 +63,244 @@ pub enum Screen {
     Done,
 }
 
+// -- ItemEditor --
+
+pub struct ItemEditor {
+    pub state: TextInputState,
+    pub focus_handle: FocusHandle,
+    pub editing_item_id: Option<Uuid>,
+}
+
+impl ItemEditor {
+    pub fn new(cx: &mut Context<Self>, initial: &str, editing_item_id: Option<Uuid>) -> Self {
+        Self {
+            state: TextInputState::new(initial),
+            focus_handle: cx.focus_handle().tab_stop(true),
+            editing_item_id,
+        }
+    }
+
+    pub fn content(&self) -> &str {
+        self.state.content()
+    }
+
+    fn on_backspace(&mut self, _: &EditorBackspace, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.backspace();
+        cx.notify();
+    }
+
+    fn on_delete(&mut self, _: &EditorDelete, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.delete();
+        cx.notify();
+    }
+
+    fn on_left(&mut self, _: &EditorLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.move_left();
+        cx.notify();
+    }
+
+    fn on_right(&mut self, _: &EditorRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.move_right();
+        cx.notify();
+    }
+
+    fn on_select_left(&mut self, _: &EditorSelectLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.select_left();
+        cx.notify();
+    }
+
+    fn on_select_right(&mut self, _: &EditorSelectRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.select_right();
+        cx.notify();
+    }
+
+    fn on_select_all(&mut self, _: &EditorSelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.select_all();
+        cx.notify();
+    }
+
+    fn on_undo(&mut self, _: &EditorUndo, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.undo();
+        cx.notify();
+    }
+
+    fn on_redo(&mut self, _: &EditorRedo, _: &mut Window, cx: &mut Context<Self>) {
+        self.state.redo();
+        cx.notify();
+    }
+
+    fn on_paste(&mut self, _: &EditorPaste, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+            self.state.insert(&text);
+            cx.notify();
+        }
+    }
+
+    fn on_copy(&mut self, _: &EditorCopy, _: &mut Window, cx: &mut Context<Self>) {
+        let range = self.state.selected_range();
+        if !range.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(
+                self.state.content()[range].to_string(),
+            ));
+        }
+    }
+
+    fn on_cut(&mut self, _: &EditorCut, _: &mut Window, cx: &mut Context<Self>) {
+        let range = self.state.selected_range();
+        if !range.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(
+                self.state.content()[range].to_string(),
+            ));
+            self.state.insert("");
+            cx.notify();
+        }
+    }
+}
+
+impl Focusable for ItemEditor {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl EntityInputHandler for ItemEditor {
+    fn text_for_range(
+        &mut self,
+        range_utf16: Range<usize>,
+        actual_range: &mut Option<Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        let range = self.state.range_from_utf16(&range_utf16);
+        actual_range.replace(self.state.range_to_utf16(&range));
+        Some(self.state.content()[range].to_string())
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        let range = self.state.selected_range();
+        Some(UTF16Selection {
+            range: self.state.range_to_utf16(&range),
+            reversed: range.start > range.end,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Range<usize>> {
+        None
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
+
+    fn replace_text_in_range(
+        &mut self,
+        range_utf16: Option<Range<usize>>,
+        new_text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let range = range_utf16
+            .as_ref()
+            .map(|r| self.state.range_from_utf16(r))
+            .unwrap_or_else(|| self.state.selected_range());
+        self.state.replace_range(range, new_text);
+        cx.notify();
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range_utf16: Option<Range<usize>>,
+        new_text: &str,
+        _new_selected_range_utf16: Option<Range<usize>>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let range = range_utf16
+            .as_ref()
+            .map(|r| self.state.range_from_utf16(r))
+            .unwrap_or_else(|| self.state.selected_range());
+        self.state.replace_range(range, new_text);
+        cx.notify();
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range_utf16: Range<usize>,
+        _bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        None
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: gpui::Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
+    }
+}
+
+impl Render for ItemEditor {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content: gpui::SharedString = self.state.content().to_string().into();
+
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .bg(rgb(0xffffff))
+            .track_focus(&self.focus_handle)
+            .key_context("ItemEditor")
+            .on_action(cx.listener(Self::on_backspace))
+            .on_action(cx.listener(Self::on_delete))
+            .on_action(cx.listener(Self::on_left))
+            .on_action(cx.listener(Self::on_right))
+            .on_action(cx.listener(Self::on_select_left))
+            .on_action(cx.listener(Self::on_select_right))
+            .on_action(cx.listener(Self::on_select_all))
+            .on_action(cx.listener(Self::on_undo))
+            .on_action(cx.listener(Self::on_redo))
+            .on_action(cx.listener(Self::on_paste))
+            .on_action(cx.listener(Self::on_copy))
+            .on_action(cx.listener(Self::on_cut))
+            .child(
+                div()
+                    .flex_1()
+                    .p(px(16.))
+                    .text_sm()
+                    .text_color(rgb(0x333333))
+                    .child(content),
+            )
+    }
+}
+
+// -- Editing state --
+
+pub struct EditingState {
+    pub editor: gpui::Entity<ItemEditor>,
+    pub is_new: bool,
+    pub item_id: Option<Uuid>,
+}
+
+// -- KanbanView --
+
 pub struct KanbanView {
     pub board: Board,
     pub current_screen: Screen,
     pub config: Config,
     pub focus_handle: FocusHandle,
     pub selected_item: Option<Uuid>,
-    pub quick_add_active: bool,
+    pub editing: Option<EditingState>,
 }
 
 impl KanbanView {
@@ -60,7 +317,7 @@ impl KanbanView {
             config,
             focus_handle: cx.focus_handle(),
             selected_item: None,
-            quick_add_active: false,
+            editing: None,
         }
     }
 
@@ -81,6 +338,21 @@ impl KanbanView {
             KeyBinding::new("delete", DeleteItem, None),
             KeyBinding::new("tab", NextItem, None),
             KeyBinding::new("shift-tab", PrevItem, None),
+            // Editor keybindings (scoped to ItemEditor context)
+            KeyBinding::new("escape", CancelEditor, Some("ItemEditor")),
+            KeyBinding::new("cmd-s", SaveEditor, Some("ItemEditor")),
+            KeyBinding::new("backspace", EditorBackspace, Some("ItemEditor")),
+            KeyBinding::new("delete", EditorDelete, Some("ItemEditor")),
+            KeyBinding::new("left", EditorLeft, Some("ItemEditor")),
+            KeyBinding::new("right", EditorRight, Some("ItemEditor")),
+            KeyBinding::new("shift-left", EditorSelectLeft, Some("ItemEditor")),
+            KeyBinding::new("shift-right", EditorSelectRight, Some("ItemEditor")),
+            KeyBinding::new("cmd-a", EditorSelectAll, Some("ItemEditor")),
+            KeyBinding::new("cmd-v", EditorPaste, Some("ItemEditor")),
+            KeyBinding::new("cmd-c", EditorCopy, Some("ItemEditor")),
+            KeyBinding::new("cmd-x", EditorCut, Some("ItemEditor")),
+            KeyBinding::new("cmd-z", EditorUndo, Some("ItemEditor")),
+            KeyBinding::new("cmd-shift-z", EditorRedo, Some("ItemEditor")),
         ]
     }
 
@@ -129,6 +401,11 @@ impl Focusable for KanbanView {
 impl Render for KanbanView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let screen = self.current_screen;
+        // Focus the editor when it opens
+        if let Some(ref editing) = self.editing {
+            let focus = editing.editor.read(cx).focus_handle.clone();
+            _window.focus(&focus, cx);
+        }
         div()
             .flex()
             .flex_col()
@@ -149,6 +426,9 @@ impl Render for KanbanView {
             .on_action(cx.listener(Self::on_new_item))
             .on_action(cx.listener(Self::on_next_item))
             .on_action(cx.listener(Self::on_prev_item))
+            .on_action(cx.listener(Self::on_save_editor))
+            .on_action(cx.listener(Self::on_cancel_editor))
+            .on_action(cx.listener(Self::on_tear_off_editor))
             .child(
                 div()
                     .flex()
@@ -171,6 +451,7 @@ impl Render for KanbanView {
                         Screen::Done => self.render_done_screen(cx).into_any_element(),
                     }),
             )
+            .child(self.render_editor_modal(cx))
     }
 }
 
@@ -265,10 +546,97 @@ impl KanbanView {
         }
     }
 
+    // -- Item editor --
+
     fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
-        self.quick_add_active = true;
+        let editor = cx.new(|cx| ItemEditor::new(cx, "", None));
+        self.editing = Some(EditingState {
+            editor,
+            is_new: true,
+            item_id: None,
+        });
         cx.notify();
     }
+
+    fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
+        let body = self.board.find_item(&id).map(|i| i.body.clone()).unwrap_or_default();
+        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id)));
+        self.editing = Some(EditingState {
+            editor,
+            is_new: false,
+            item_id: Some(id),
+        });
+        cx.notify();
+    }
+
+    fn on_save_editor(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editing) = self.editing.take() else {
+            return;
+        };
+        let content = editing.editor.read(cx).content().to_string();
+        let title = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("").to_string();
+        if title.is_empty() {
+            cx.notify();
+            return;
+        }
+
+        if editing.is_new {
+            let item = Item::new(&content);
+            let location = match self.current_screen {
+                Screen::Backlog => Location::Backlog,
+                Screen::Active => Location::Active(Category::Today),
+                Screen::Done => Location::Backlog,
+            };
+            if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
+                self.board.insert_item(item, &location);
+            }
+        } else if let Some(id) = editing.item_id
+            && let Some(location) = self.board.find_item_location(&id) {
+            if let Some(item) = self.board.find_item_mut(&id) {
+                item.body = content;
+                item.updated_at = chrono::Utc::now();
+            }
+            let item_ref = self.board.find_item(&id).cloned();
+            if let Some(item) = item_ref {
+                let _ = Storage::write_item(&self.config.data_dir, &item, &location);
+            }
+        }
+        cx.notify();
+    }
+
+    fn on_cancel_editor(&mut self, _: &CancelEditor, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editing = None;
+        cx.notify();
+    }
+
+    fn on_tear_off_editor(&mut self, _: &TearOffEditor, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editing) = self.editing.take() else {
+            return;
+        };
+        let content = editing.editor.read(cx).content().to_string();
+        let item_id = editing.item_id;
+
+        let opts = gpui::WindowOptions {
+            window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::centered(
+                None,
+                gpui::size(px(600.), px(400.)),
+                cx,
+            ))),
+            titlebar: Some(gpui::TitlebarOptions {
+                title: Some("Edit Item".into()),
+                appears_transparent: false,
+                traffic_light_position: None,
+            }),
+            ..Default::default()
+        };
+
+        let _ = cx.open_window(opts, |_, cx| {
+            cx.new(|cx| ItemEditor::new(cx, &content, item_id))
+        });
+        cx.notify();
+    }
+
+    // -- Keyboard navigation --
 
     fn current_screen_items(&self) -> Vec<Uuid> {
         match self.current_screen {
@@ -326,26 +694,7 @@ impl KanbanView {
         cx.notify();
     }
 
-    #[allow(dead_code)]
-    fn commit_quick_add(&mut self, title: &str, cx: &mut Context<Self>) {
-        let title = title.trim();
-        if title.is_empty() {
-            self.quick_add_active = false;
-            cx.notify();
-            return;
-        }
-        let item = Item::new(title);
-        let location = match self.current_screen {
-            Screen::Backlog => Location::Backlog,
-            Screen::Active => Location::Active(Category::Today),
-            Screen::Done => Location::Backlog,
-        };
-        if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
-            self.board.insert_item(item, &location);
-        }
-        self.quick_add_active = false;
-        cx.notify();
-    }
+    // -- Rendering --
 
     fn render_tab(&self, label: &str, screen: Screen, cx: &mut Context<Self>) -> impl IntoElement {
         let is_active = self.current_screen == screen;
@@ -358,7 +707,7 @@ impl KanbanView {
             .text_color(rgb(0x333333))
             .cursor_pointer()
             .on_mouse_down(
-                gpui::MouseButton::Left,
+                MouseButton::Left,
                 cx.listener(move |this, _, _window, cx| {
                     this.current_screen = screen;
                     cx.notify();
@@ -380,10 +729,18 @@ impl KanbanView {
             .border_color(if is_selected { rgb(0x2196f3) } else { rgb(0xdddddd) })
             .cursor_pointer()
             .on_mouse_down(
-                gpui::MouseButton::Left,
+                MouseButton::Left,
                 cx.listener(move |this, _, _window, cx| {
                     this.selected_item = Some(item_id);
                     cx.notify();
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                    if event.click_count >= 2 {
+                        this.open_editor_for_item(item_id, cx);
+                    }
                 }),
             )
             .child(
@@ -421,9 +778,8 @@ impl KanbanView {
                             .text_sm()
                             .text_color(rgb(0x37474f))
                             .child(title.to_string()),
-            )
-            .child(self.render_quick_add_bar(cx))
-            .child(
+                    )
+                    .child(
                         div()
                             .text_xs()
                             .text_color(rgb(0x78909c))
@@ -469,30 +825,94 @@ impl KanbanView {
             .child(self.render_column("Done", &self.board.done, cx))
     }
 
-    fn render_quick_add_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.quick_add_active {
+    fn render_editor_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(ref editing) = self.editing {
             div()
-                .p(px(8.))
-                .bg(rgb(0xffffff))
-                .border_b_1()
-                .border_color(rgb(0xcccccc))
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .bg(gpui::rgba(0x00000040))
+                .flex()
+                .justify_center()
+                .items_center()
                 .child(
                     div()
-                        .px(px(8.))
-                        .py(px(4.))
-                        .rounded(px(4.))
-                        .border_1()
-                        .border_color(rgb(0x2196f3))
-                        .text_sm()
-                        .text_color(rgb(0x999999))
-                        .on_mouse_down(
-                            gpui::MouseButton::Left,
-                            cx.listener(|this, _, _window, cx| {
-                                this.quick_add_active = false;
-                                cx.notify();
-                            }),
+                        .w(px(600.))
+                        .h(px(400.))
+                        .bg(rgb(0xffffff))
+                        .rounded(px(8.))
+                        .flex()
+                        .flex_col()
+                        .overflow_hidden()
+                        .child(
+                            div()
+                                .flex_1()
+                                .child(editing.editor.clone()),
                         )
-                        .child("Type item title, press Enter to create... (click to cancel)"),
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(8.))
+                                .p(px(12.))
+                                .border_t_1()
+                                .border_color(rgb(0xe0e0e0))
+                                .child(
+                                    div()
+                                        .px(px(16.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .bg(rgb(0x4488ff))
+                                        .text_color(rgb(0xffffff))
+                                        .text_sm()
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_save_editor(&SaveEditor, window, cx);
+                                            }),
+                                        )
+                                        .child("Save"),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(16.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .bg(rgb(0xffffff))
+                                        .border_1()
+                                        .border_color(rgb(0xcccccc))
+                                        .text_color(rgb(0x333333))
+                                        .text_sm()
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_cancel_editor(&CancelEditor, window, cx);
+                                            }),
+                                        )
+                                        .child("Cancel"),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(12.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .bg(rgb(0xffffff))
+                                        .border_1()
+                                        .border_color(rgb(0xcccccc))
+                                        .text_sm()
+                                        .cursor_pointer()
+                                        .child("\u{29A2}")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_tear_off_editor(&TearOffEditor, window, cx);
+                                            }),
+                                        ),
+                                ),
+                        ),
                 )
         } else {
             div()
