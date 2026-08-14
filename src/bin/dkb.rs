@@ -1,9 +1,13 @@
 use gpui::{App, WindowOptions, prelude::*, px, size};
 use gpui_platform::application;
 
+use dkb::app::KanbanView;
+
 fn main() {
     application().run(|cx: &mut App| {
         cx.activate(true);
+
+        KanbanView::setup_menus(cx);
 
         let opts = WindowOptions {
             window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::centered(
