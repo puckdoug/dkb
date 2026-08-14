@@ -71,19 +71,55 @@ pub struct ItemEditor {
     pub state: TextInputState,
     pub focus_handle: FocusHandle,
     pub editing_item_id: Option<Uuid>,
+    pub is_new: bool,
+    pub config: Config,
 }
 
 impl ItemEditor {
-    pub fn new(cx: &mut Context<Self>, initial: &str, editing_item_id: Option<Uuid>) -> Self {
+    pub fn new(cx: &mut Context<Self>, initial: &str, editing_item_id: Option<Uuid>, is_new: bool, config: Config) -> Self {
         Self {
             state: TextInputState::new(initial),
             focus_handle: cx.focus_handle().tab_stop(true),
             editing_item_id,
+            is_new,
+            config,
         }
     }
 
     pub fn content(&self) -> &str {
         self.state.content()
+    }
+
+    fn on_save(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
+        let content = self.state.content().to_string();
+        let title = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("").to_string();
+        if title.is_empty() {
+            return;
+        }
+
+        if self.is_new {
+            let item = Item::new(&content);
+            let location = Location::Active(Category::Today);
+            if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
+                self.editing_item_id = Some(item.id);
+                self.is_new = false;
+            }
+        } else if let Some(id) = self.editing_item_id {
+            let item = Item {
+                id,
+                body: content,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                completed_at: None,
+            };
+            let location = Location::Active(Category::Today);
+            let _ = Storage::write_item(&self.config.data_dir, &item, &location);
+        }
+        cx.notify();
+    }
+
+    fn on_close(&mut self, _: &CloseWindow, window: &mut Window, _cx: &mut Context<Self>) {
+        window.remove_window();
     }
 
     fn on_backspace(&mut self, _: &EditorBackspace, _: &mut Window, cx: &mut Context<Self>) {
@@ -469,6 +505,9 @@ impl Render for ItemEditor {
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
+            .on_action(cx.listener(Self::on_save))
+            .on_action(cx.listener(Self::on_close))
+            // Editor text area
             .child(
                 div()
                     .flex_1()
@@ -479,6 +518,52 @@ impl Render for ItemEditor {
                         editor: cx.entity(),
                     }),
             )
+            // Bottom button bar
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(8.))
+                    .p(px(12.))
+                    .border_t_1()
+                    .border_color(rgb(0xe0e0e0))
+                    .child(
+                        div()
+                            .px(px(16.))
+                            .py(px(6.))
+                            .rounded(px(4.))
+                            .bg(rgb(0x4488ff))
+                            .text_color(rgb(0xffffff))
+                            .text_sm()
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, window, cx| {
+                                    this.on_save(&SaveEditor, window, cx);
+                                }),
+                            )
+                            .child("Save"),
+                    )
+                    .child(
+                        div()
+                            .px(px(16.))
+                            .py(px(6.))
+                            .rounded(px(4.))
+                            .bg(rgb(0xffffff))
+                            .border_1()
+                            .border_color(rgb(0xcccccc))
+                            .text_color(rgb(0x333333))
+                            .text_sm()
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, window, cx| {
+                                    this.on_close(&CloseWindow, window, cx);
+                                }),
+                            )
+                            .child("Close"),
+                    ),
+            )
     }
 }
 
@@ -486,8 +571,6 @@ impl Render for ItemEditor {
 
 pub struct EditingState {
     pub editor: gpui::Entity<ItemEditor>,
-    pub is_new: bool,
-    pub item_id: Option<Uuid>,
 }
 
 // -- Simple tooltip view --
@@ -555,8 +638,8 @@ impl KanbanView {
             KeyBinding::new("delete", DeleteItem, None),
             KeyBinding::new("tab", NextItem, None),
             KeyBinding::new("shift-tab", PrevItem, None),
-            KeyBinding::new("escape", CancelEditor, Some("ItemEditor")),
             KeyBinding::new("cmd-s", SaveEditor, Some("ItemEditor")),
+            KeyBinding::new("cmd-w", CloseWindow, Some("ItemEditor")),
             KeyBinding::new("backspace", EditorBackspace, Some("ItemEditor")),
             KeyBinding::new("delete", EditorDelete, Some("ItemEditor")),
             KeyBinding::new("left", EditorLeft, Some("ItemEditor")),
@@ -765,23 +848,15 @@ impl KanbanView {
     // -- Item editor --
 
     fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor = cx.new(|cx| ItemEditor::new(cx, "", None));
-        self.editing = Some(EditingState {
-            editor,
-            is_new: true,
-            item_id: None,
-        });
+        let editor = cx.new(|cx| ItemEditor::new(cx, "", None, true, self.config.clone()));
+        self.editing = Some(EditingState { editor });
         cx.notify();
     }
 
     fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
         let body = self.board.find_item(&id).map(|i| i.body.clone()).unwrap_or_default();
-        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id)));
-        self.editing = Some(EditingState {
-            editor,
-            is_new: false,
-            item_id: Some(id),
-        });
+        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id), false, self.config.clone()));
+        self.editing = Some(EditingState { editor });
         cx.notify();
     }
 
@@ -796,7 +871,10 @@ impl KanbanView {
             return;
         }
 
-        if editing.is_new {
+        let is_new = editing.editor.read(cx).is_new;
+        let item_id = editing.editor.read(cx).editing_item_id;
+
+        if is_new {
             let item = Item::new(&content);
             let location = match self.current_screen {
                 Screen::Backlog => Location::Backlog,
@@ -806,7 +884,7 @@ impl KanbanView {
             if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
                 self.board.insert_item(item, &location);
             }
-        } else if let Some(id) = editing.item_id
+        } else if let Some(id) = item_id
             && let Some(location) = self.board.find_item_location(&id) {
             if let Some(item) = self.board.find_item_mut(&id) {
                 item.body = content;
@@ -830,7 +908,9 @@ impl KanbanView {
             return;
         };
         let content = editing.editor.read(cx).content().to_string();
-        let item_id = editing.item_id;
+        let item_id = editing.editor.read(cx).editing_item_id;
+        let is_new = editing.editor.read(cx).is_new;
+        let config = self.config.clone();
 
         let opts = gpui::WindowOptions {
             window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::centered(
@@ -847,7 +927,7 @@ impl KanbanView {
         };
 
         let _ = cx.open_window(opts, |_, cx| {
-            cx.new(|cx| ItemEditor::new(cx, &content, item_id))
+            cx.new(|cx| ItemEditor::new(cx, &content, item_id, is_new, config))
         });
         cx.notify();
     }
