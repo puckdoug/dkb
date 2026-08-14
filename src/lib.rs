@@ -3,3 +3,4 @@ pub mod board;
 pub mod config;
 pub mod item;
 pub mod storage;
+pub mod text_input;

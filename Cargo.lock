@@ -1344,6 +1344,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "tempfile",
+ "unicode-segmentation",
  "uuid",
 ]
 
