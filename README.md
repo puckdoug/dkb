@@ -101,7 +101,7 @@ For full instructions on entitlements, provisioning profiles, code signing, buil
 This project is dual-licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or [LICENSE](LICENSE) or http://opensource.org/licenses/MIT)
+- MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 
