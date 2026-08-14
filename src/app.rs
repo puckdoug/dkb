@@ -73,16 +73,18 @@ pub struct ItemEditor {
     pub editing_item_id: Option<Uuid>,
     pub is_new: bool,
     pub config: Config,
+    pub is_torn_off: bool,
 }
 
 impl ItemEditor {
-    pub fn new(cx: &mut Context<Self>, initial: &str, editing_item_id: Option<Uuid>, is_new: bool, config: Config) -> Self {
+    pub fn new(cx: &mut Context<Self>, initial: &str, editing_item_id: Option<Uuid>, is_new: bool, config: Config, is_torn_off: bool) -> Self {
         Self {
             state: TextInputState::new(initial),
             focus_handle: cx.focus_handle().tab_stop(true),
             editing_item_id,
             is_new,
             config,
+            is_torn_off,
         }
     }
 
@@ -518,8 +520,8 @@ impl Render for ItemEditor {
                         editor: cx.entity(),
                     }),
             )
-            // Bottom button bar
-            .child(
+            // Bottom button bar — only shown in torn-off window (modal has its own)
+            .when(self.is_torn_off, |this| this.child(
                 div()
                     .flex()
                     .flex_row()
@@ -557,13 +559,13 @@ impl Render for ItemEditor {
                             .cursor_pointer()
                             .on_mouse_down(
                                 MouseButton::Left,
-                                cx.listener(|this, _, window, cx| {
-                                    this.on_close(&CloseWindow, window, cx);
+                                cx.listener(|_, _, window, _cx| {
+                                    window.remove_window();
                                 }),
                             )
-                            .child("Close"),
+                            .child("Cancel"),
                     ),
-            )
+            ))
     }
 }
 
@@ -848,14 +850,14 @@ impl KanbanView {
     // -- Item editor --
 
     fn on_new_item(&mut self, _: &NewItem, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor = cx.new(|cx| ItemEditor::new(cx, "", None, true, self.config.clone()));
+        let editor = cx.new(|cx| ItemEditor::new(cx, "", None, true, self.config.clone(), false));
         self.editing = Some(EditingState { editor });
         cx.notify();
     }
 
     fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
         let body = self.board.find_item(&id).map(|i| i.body.clone()).unwrap_or_default();
-        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id), false, self.config.clone()));
+        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id), false, self.config.clone(), false));
         self.editing = Some(EditingState { editor });
         cx.notify();
     }
@@ -927,7 +929,7 @@ impl KanbanView {
         };
 
         let _ = cx.open_window(opts, |_, cx| {
-            cx.new(|cx| ItemEditor::new(cx, &content, item_id, is_new, config))
+            cx.new(|cx| ItemEditor::new(cx, &content, item_id, is_new, config, true))
         });
         cx.notify();
     }
