@@ -465,6 +465,7 @@ The CLI keeps a small state file, `cli_state.json`, in the data directory. This 
 | `dk pick <selection>` | `dk p` | Set the current item. |
 | `dk edit [selection...]` | `dk ed` | Open one or more items in your editor. |
 | `dk show [selection]` | `dk s` | Display an item via $PAGER or stdout. |
+| `dk path [selection]` | | Print the full path to an item's file. |
 | `dk move <selection> <category>` | `dk mv` | Move an item to a different column. |
 | `dk delete [selection...] [-f]` | `dk rm` | Delete items, with confirmation. |
 
@@ -563,6 +564,16 @@ dk s                    # show current item
 dk show 3               # show item at index 3
 dk show backlog/0       # show first Backlog item
 dk show 550e8400-e29b-41d4-a716-446655440000.md
+```
+
+### `dk path`
+
+Prints the full filesystem path to the selected item's `.md` file. With no argument, uses the current item. Useful for scripting or piping to other tools.
+
+```
+dk path                 # path to current item
+dk path 3               # path to item at index 3
+dk path backlog/0       # path to first Backlog item
 ```
 
 ### `dk move` / `dk mv`

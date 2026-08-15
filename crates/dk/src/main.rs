@@ -21,7 +21,7 @@ fn main() {
             std::process::exit(0);
         }
         "new" | "n" | "list" | "ls" | "pick" | "p" | "edit" | "ed" | "move" | "mv"
-        | "delete" | "rm" | "show" | "s" => {}
+        | "delete" | "rm" | "show" | "s" | "path" => {}
         other => {
             eprintln!("dk: unknown command: {other}");
             eprintln!();
@@ -54,6 +54,7 @@ fn main() {
         }
         "edit" | "ed" => commands::edit::run_edit(&data_dir, rest),
         "show" | "s" => commands::show::run_show(&data_dir, rest),
+        "path" => commands::path::run_path(&data_dir, rest),
         "move" | "mv" => {
             if rest.len() < 2 {
                 Err(std::io::Error::other("move requires <selection> <category>"))
@@ -93,6 +94,7 @@ fn print_usage() {
     eprintln!("  pick (p)        Set the current item");
     eprintln!("  edit (ed)       Edit one or more items via $EDITOR");
     eprintln!("  show (s)        Display an item via $PAGER or stdout");
+    eprintln!("  path            Print the full path to an item");
     eprintln!("  move (mv)       Move an item to a different category");
     eprintln!("  delete (rm)    Delete items (with confirmation)");
     eprintln!("  help            Show this help, or help for a command");
@@ -109,6 +111,7 @@ fn print_command_help(cmd: &str) {
         "move" | "mv" => print_move_help(),
         "delete" | "rm" => print_delete_help(),
         "show" | "s" => print_show_help(),
+        "path" => print_path_help(),
         "help" => print_help_help(),
         other => {
             eprintln!("dk: unknown command for help: {other}");
@@ -218,7 +221,20 @@ fn print_help_help() {
     println!();
     println!("Show general help, or detailed help for a specific command.");
     println!();
-    println!("available commands: new, list, pick, edit, show, move, delete");
+    println!("available commands: new, list, pick, edit, show, path, move, delete");
+}
+
+fn print_path_help() {
+    println!("dk path [selection]");
+    println!();
+    println!("Print the full filesystem path to the selected item's .md file.");
+    println!("With no argument, uses the current item. Selection uses the same");
+    println!("mechanism as edit.");
+    println!();
+    println!("examples:");
+    println!("  dk path                  # path to current item");
+    println!("  dk path 3                # path to item at index 3");
+    println!("  dk path backlog/0        # path to first backlog item");
 }
 
 fn print_show_help() {

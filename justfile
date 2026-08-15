@@ -1,5 +1,5 @@
 # Build by default
-default: build
+default: pkg
 
 # Run cargo test
 test *ARGS:
