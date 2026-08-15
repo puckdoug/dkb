@@ -18,7 +18,8 @@ Daily Kanban (`dkb`) is a native macOS Kanban application for organising tasks a
 ### System requirements
 
 - macOS 13.0+ (Ventura, Sonoma, Sequoia or newer)
-- No command-line arguments are needed or supported — `dkb` is a GUI-only application launched by double-clicking the app or running `dkb` in a terminal.
+- The GUI is launched by double-clicking the app or running `dkb` in a terminal. No command-line arguments are needed or supported.
+- The `dk` command-line tool (see Section 13) can be used to manage items from a terminal or script.
 
 ---
 
@@ -435,6 +436,142 @@ The viewer is configured in Settings (see Section 7). If set to Auto-Detect, the
 - **Copy** (`⌘ C`)
 - **Paste** (`⌘ V`)
 - **Select All** (`⌘ A`)
+
+---
+
+## 13. The `dk` Command-Line Tool
+
+Daily Kanban ships with a companion CLI, `dk`, that operates on the same data directory as the GUI. It is useful for quick edits from a terminal, scripting, and use over SSH. The GUI and CLI can be used interchangeably on the same board — they share `config.toml` and `board_state.json`.
+
+The CLI keeps a small state file, `cli_state.json`, in the data directory. This records the **current item** (the last item picked, created, or moved) and the **last list** (the order of items shown by the most recent `dk list`). Several commands refer back to these to resolve shorthand selectors like `3` or `yesterday/1`.
+
+### Commands at a glance
+
+| Command | Alias | Purpose |
+|---------|-------|---------|
+| `dk new [category]` | `dk n` | Create a new item by launching your editor. |
+| `dk list [category]` | `dk ls` | List items and remember their indices. |
+| `dk pick <selection>` | `dk p` | Set the current item. |
+| `dk edit [selection...]` | `dk ed` | Open one or more items in your editor. |
+| `dk move <selection> <category>` | `dk mv` | Move an item to a different column. |
+| `dk delete [selection...] [-f]` | `dk rm` | Delete items, with confirmation. |
+
+### Category aliases
+
+Commands that accept a category (`new`, `list`, `move`) understand the following aliases (case-insensitive):
+
+| Category | Aliases |
+|----------|---------|
+| Backlog | `b`, `backlog` |
+| Yesterday | `y`, `yesterday` |
+| Today | `t`, `today` |
+| This Week | `tw`, `thisweek`, `this_week` |
+| Next Week | `nw`, `nextweek`, `next_week` |
+| Done | `d`, `done` |
+
+### Selectors
+
+`pick`, `edit`, `move`, and `delete` all accept the same selector forms:
+
+| Form | Meaning |
+|------|---------|
+| *no argument* | The current item (set via `pick`, `new`, or `move`). |
+| `<number>` | The item at that index in the most recent `dk list` output. |
+| `<category>/<number>` | The item at that index within the given category (e.g. `backlog/0`). |
+| `<uuid>` or `<uuid>.md` | The item with that UUID. |
+| `<path>` | Absolute path or relative path to the item's `.md` file. |
+
+The index is the 0-based number printed by `dk list`. Indices only remain valid until the next `dk list` run; the CLI remembers the last list so that `dk pick 3` knows which list "3" refers to.
+
+### Editor selection
+
+`new` and `edit` launch an external editor seeded with the item body. The editor is chosen in this order:
+
+1. `$VISUAL` if set,
+2. `$EDITOR` if set,
+3. `vi` as a final fallback.
+
+The value may include arguments (for example, `EDITOR="code --wait"`). The cursor is positioned with `+line:col` syntax; `new` opens at `+1:3` (after the `# ` header) and `edit` opens at `+1:1`.
+
+### `dk new` / `dk n`
+
+Creates a new item by opening your editor on a temp file pre-seeded with `# `. On save, the file becomes the item body and is written to the chosen category (Backlog by default). If the editor is saved with only `#` or an empty body, the operation is aborted. The new item is marked current.
+
+```
+dk n                    # new Backlog item
+dk new today           # new Today item
+dk n tw                # new This Week item
+dk new nextweek
+dk n d                 # new Done item
+```
+
+### `dk list` / `dk ls`
+
+Lists items and remembers their order so subsequent selectors like `3` work. With no argument it lists all four active columns in order: Yesterday, Today, This Week, Next Week. `backlog` and `done` are only shown when requested explicitly.
+
+Each row begins with the index (right-justified to the widest index in the list) followed by the cleaned title (Markdown formatting stripped), truncated to fit the terminal without wrapping. The current item's row is prefixed with `* ` instead of its index.
+
+```
+dk ls                  # all active items
+dk ls backlog          # Backlog items
+dk ls done            # Done items
+dk ls yesterday       # only Yesterday
+```
+
+If there are no items to show, `dk` prints `(no items)`.
+
+### `dk pick` / `dk p`
+
+Sets the current item. Prints the picked item's title and UUID. Requires a selector argument — there is no "pick current" since that is a no-op.
+
+```
+dk p 3                 # pick index 3 from the last `dk list`
+dk pick backlog/0      # pick the first Backlog item
+dk pick 550e8400-e29b-41d4-a716-446655440000.md
+```
+
+### `dk edit` / `dk ed`
+
+Opens the selected item(s) in your editor, one at a time in the order given. With no arguments it edits the current item. The edited body replaces the item body and `updated_at` is refreshed. The item stays in its current category.
+
+```
+dk ed                  # edit current item
+dk edit 3              # edit index 3
+dk edit 3 5 9          # edit several items sequentially
+dk edit 550e8400-e29b-41d4-a716-446655440000.md
+dk edit backlog/2      # edit the third Backlog item
+```
+
+### `dk move` / `dk mv`
+
+Moves an item to a different category. Requires a selector and a destination category. Prints the moved item's title and its new location.
+
+```
+dk mv 3 done           # move item 3 to Done
+dk mv yesterday/1 today
+dk mv backlog nextweek
+dk mv 3 b              # move item 3 to Backlog
+```
+
+### `dk delete` / `dk rm`
+
+Deletes one or more items. With no arguments it deletes the current item. By default each deletion prompts for confirmation (`y`/`Y` to proceed, anything else aborts). Pass `-f` or `--force` to skip the prompt. Deleting the current item clears the current-item marker.
+
+```
+dk rm                  # delete current item (with prompt)
+dk rm 3                # delete index 3 (with prompt)
+dk rm backlog/5        # delete the sixth Backlog item
+dk rm 3 5 9 -f         # delete three items without prompting
+```
+
+### CLI state file
+
+`cli_state.json` lives in the data directory (see Section 9) alongside `config.toml` and `board_state.json`. It records:
+
+- `current` — the UUID of the current item, or `null` if none is set.
+- `last_list` — the ordered UUIDs from the most recent `dk list`, used to resolve numeric selectors.
+
+It is created automatically when first needed and is safe to delete (the CLI simply treats a missing file as "no current item, empty last list").
 
 ---
 

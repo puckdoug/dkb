@@ -17,9 +17,9 @@ pedantic:
 build *ARGS:
   cargo build {{ ARGS }}
 
-# Run the app
+# Run the GUI app
 run *ARGS:
-  cargo run {{ ARGS }}
+  cargo run -p dkb {{ ARGS }}
 
 # Build the Mac OS App bundle
 pkg:
