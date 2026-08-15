@@ -183,7 +183,7 @@ impl Storage {
     ) -> std::io::Result<()> {
         let mut state = board.to_board_state();
         state.last_active_date = last_active_date;
-        let state_path = data_dir.join("board_state.json");
+        let state_path = state_file_path(data_dir);
         let content = serde_json::to_string_pretty(&state)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(state_path, content)?;
@@ -191,7 +191,7 @@ impl Storage {
     }
 
     pub fn save_board_state(data_dir: &Path, board: &Board) -> std::io::Result<()> {
-        let state_path = data_dir.join("board_state.json");
+        let state_path = state_file_path(data_dir);
         let existing_date = if let Ok(content) = std::fs::read_to_string(&state_path)
             && let Ok(state) = serde_json::from_str::<BoardState>(&content)
         {
@@ -291,7 +291,7 @@ impl Storage {
                 .cmp(&a.completed_at.unwrap_or_default())
         });
 
-        let state_path = data_dir.join("board_state.json");
+        let state_path = state_file_path(data_dir);
         let mut state = if let Ok(content) = std::fs::read_to_string(&state_path)
             && let Ok(loaded_state) = serde_json::from_str::<BoardState>(&content)
         {
@@ -314,5 +314,12 @@ impl Storage {
         }
 
         Ok(board)
+    }
+}
+
+fn state_file_path(data_dir: &Path) -> PathBuf {
+    match data_dir.parent() {
+        Some(p) => p.join("board_state.json"),
+        None => data_dir.join("board_state.json"),
     }
 }

@@ -43,7 +43,7 @@ fn test_location_from_path() {
 #[test]
 fn test_storage_init_creates_directories() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data");
     Storage::init(&data_dir).unwrap();
     assert!(data_dir.join("backlog").exists());
     assert!(data_dir.join("active/yesterday").exists());
@@ -56,7 +56,7 @@ fn test_storage_init_creates_directories() {
 #[test]
 fn test_storage_init_idempotent() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
     Storage::init(&data_dir).unwrap();
 }
@@ -64,7 +64,7 @@ fn test_storage_init_idempotent() {
 #[test]
 fn test_write_item_creates_file() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item = Item::new("Test task");
@@ -77,7 +77,7 @@ fn test_write_item_creates_file() {
 #[test]
 fn test_write_item_active_today() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item = Item::new("Today task");
@@ -90,7 +90,7 @@ fn test_write_item_active_today() {
 #[test]
 fn test_read_item_round_trip() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let mut item = Item::new("Round trip");
@@ -109,7 +109,7 @@ fn test_read_item_round_trip() {
 #[test]
 fn test_read_item_with_completed_at() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let mut item = Item::new("Done task");
@@ -123,7 +123,7 @@ fn test_read_item_with_completed_at() {
 #[test]
 fn test_move_item_backlog_to_active_today() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item = Item::new("Move me");
@@ -149,7 +149,7 @@ fn test_move_item_backlog_to_active_today() {
 #[test]
 fn test_move_item_to_done_sets_completed_at() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item = Item::new("Complete me");
@@ -169,7 +169,7 @@ fn test_move_item_to_done_sets_completed_at() {
 #[test]
 fn test_move_item_from_done_clears_completed_at() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let mut item = Item::new("Reopen me");
@@ -189,7 +189,7 @@ fn test_move_item_from_done_clears_completed_at() {
 #[test]
 fn test_delete_item() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item = Item::new("Delete me");
@@ -204,7 +204,7 @@ fn test_delete_item() {
 #[test]
 fn test_load_board_empty() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let board = Storage::load_board(&data_dir).unwrap();
@@ -219,7 +219,7 @@ fn test_load_board_empty() {
 #[test]
 fn test_load_board_with_items() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let item1 = Item::new("Backlog item");
@@ -244,7 +244,7 @@ fn test_load_board_with_items() {
 #[test]
 fn test_load_board_done_sorted_by_completed_at_desc() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let mut older = Item::new("Older done");
@@ -264,22 +264,22 @@ fn test_load_board_done_sorted_by_completed_at_desc() {
 #[test]
 fn test_board_state_rollover_today_to_yesterday() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let data_dir = temp_dir.path();
-    Storage::init(data_dir).unwrap();
+    let data_dir = temp_dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let today_item = Item::new("Task for today");
     let yesterday_item = Item::new("Existing yesterday task");
-    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
-    Storage::write_item(data_dir, &yesterday_item, &Location::Active(Category::Yesterday)).unwrap();
+    Storage::write_item(&data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &yesterday_item, &Location::Active(Category::Yesterday)).unwrap();
 
     let state = BoardState {
         version: 1,
         order: std::collections::HashMap::new(),
         last_active_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()),
     };
-    Storage::save_board_state_with_date(data_dir, &Board::default(), state.last_active_date).unwrap();
+    Storage::save_board_state_with_date(&data_dir, &Board::default(), state.last_active_date).unwrap();
 
-    let board = Storage::load_board(data_dir).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     assert_eq!(board.active.today.len(), 0);
     assert_eq!(board.active.yesterday.len(), 2);
     assert!(board.active.yesterday.iter().any(|i| i.id == today_item.id));
@@ -295,11 +295,11 @@ fn test_board_state_rollover_today_to_yesterday() {
 #[test]
 fn test_board_state_rollover_same_day_no_op() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let data_dir = temp_dir.path();
-    Storage::init(data_dir).unwrap();
+    let data_dir = temp_dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let today_item = Item::new("Task for today");
-    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
 
     let today = chrono::Local::now().date_naive();
     let state = BoardState {
@@ -307,9 +307,9 @@ fn test_board_state_rollover_same_day_no_op() {
         order: std::collections::HashMap::new(),
         last_active_date: Some(today),
     };
-    Storage::save_board_state_with_date(data_dir, &Board::default(), state.last_active_date).unwrap();
+    Storage::save_board_state_with_date(&data_dir, &Board::default(), state.last_active_date).unwrap();
 
-    let board = Storage::load_board(data_dir).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     assert_eq!(board.active.today.len(), 1);
     assert_eq!(board.active.yesterday.len(), 0);
     assert_eq!(board.active.today[0].id, today_item.id);
@@ -318,17 +318,17 @@ fn test_board_state_rollover_same_day_no_op() {
 #[test]
 fn test_board_state_rollover_initializes_date_when_none() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let data_dir = temp_dir.path();
-    Storage::init(data_dir).unwrap();
+    let data_dir = temp_dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let today_item = Item::new("Task for today");
-    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
 
     // No board_state.json saved initially
-    let _board = Storage::load_board(data_dir).unwrap();
+    let _board = Storage::load_board(&data_dir).unwrap();
 
     // After load_board, board_state.json should exist with today's date
-    let content = std::fs::read_to_string(data_dir.join("board_state.json")).unwrap();
+    let content = std::fs::read_to_string(temp_dir.path().join("board_state.json")).unwrap();
     let state: BoardState = serde_json::from_str(&content).unwrap();
     let today = chrono::Local::now().date_naive();
     assert_eq!(state.last_active_date, Some(today));

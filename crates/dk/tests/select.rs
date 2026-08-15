@@ -46,26 +46,28 @@ fn test_parse_uuid_file() {
 #[test]
 fn test_resolve_current() {
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
-    let id = seed_item(dir.path(), &Location::Active(Category::Today), "task");
-    let board = dkb_core::storage::Storage::load_board(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
+    let id = seed_item(&data_dir, &Location::Active(Category::Today), "task");
+    let board = dkb_core::storage::Storage::load_board(&data_dir).unwrap();
     let mut state = CliState::default();
     state.set_current(id);
-    let resolved = resolve_selection(&Selection::Current, &board, &state, dir.path());
+    let resolved = resolve_selection(&Selection::Current, &board, &state, &data_dir);
     assert_eq!(resolved.unwrap(), id);
 }
 
 #[test]
 fn test_resolve_index() {
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
-    let id1 = seed_item(dir.path(), &Location::Active(Category::Today), "a");
-    let id2 = seed_item(dir.path(), &Location::Active(Category::Today), "b");
-    let board = dkb_core::storage::Storage::load_board(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
+    let id1 = seed_item(&data_dir, &Location::Active(Category::Today), "a");
+    let id2 = seed_item(&data_dir, &Location::Active(Category::Today), "b");
+    let board = dkb_core::storage::Storage::load_board(&data_dir).unwrap();
     let mut state = CliState::default();
     state.set_last_list(vec![id1, id2]);
-    let r0 = resolve_selection(&Selection::Index(0), &board, &state, dir.path());
-    let r1 = resolve_selection(&Selection::Index(1), &board, &state, dir.path());
+    let r0 = resolve_selection(&Selection::Index(0), &board, &state, &data_dir);
+    let r1 = resolve_selection(&Selection::Index(1), &board, &state, &data_dir);
     assert_eq!(r0.unwrap(), id1);
     assert_eq!(r1.unwrap(), id2);
 }
@@ -82,22 +84,23 @@ fn test_resolve_index_out_of_range() {
 #[test]
 fn test_resolve_category_index() {
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
-    let id1 = seed_item(dir.path(), &Location::Backlog, "first");
-    let id2 = seed_item(dir.path(), &Location::Backlog, "second");
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
+    let id1 = seed_item(&data_dir, &Location::Backlog, "first");
+    let id2 = seed_item(&data_dir, &Location::Backlog, "second");
 
     let mut board = dkb_core::board::Board::default();
-    board.backlog.push(Storage::read_item(dir.path(), &id1, &Location::Backlog).unwrap());
-    board.backlog.push(Storage::read_item(dir.path(), &id2, &Location::Backlog).unwrap());
-    Storage::save_board_state(dir.path(), &board).unwrap();
+    board.backlog.push(Storage::read_item(&data_dir, &id1, &Location::Backlog).unwrap());
+    board.backlog.push(Storage::read_item(&data_dir, &id2, &Location::Backlog).unwrap());
+    Storage::save_board_state(&data_dir, &board).unwrap();
 
-    let board = dkb_core::storage::Storage::load_board(dir.path()).unwrap();
+    let board = dkb_core::storage::Storage::load_board(&data_dir).unwrap();
     let state = CliState::default();
     let r = resolve_selection(
         &Selection::CategoryIndex(Location::Backlog, 0),
         &board,
         &state,
-        dir.path(),
+        &data_dir,
     );
     assert_eq!(r.unwrap(), id1);
 }
@@ -105,10 +108,11 @@ fn test_resolve_category_index() {
 #[test]
 fn test_resolve_file() {
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
-    let id = seed_item(dir.path(), &Location::Done, "done task");
-    let board = dkb_core::storage::Storage::load_board(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
+    let id = seed_item(&data_dir, &Location::Done, "done task");
+    let board = dkb_core::storage::Storage::load_board(&data_dir).unwrap();
     let state = CliState::default();
-    let r = resolve_selection(&Selection::File(id), &board, &state, dir.path());
+    let r = resolve_selection(&Selection::File(id), &board, &state, &data_dir);
     assert_eq!(r.unwrap(), id);
 }

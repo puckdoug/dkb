@@ -7,7 +7,7 @@ use uuid::Uuid;
 #[test]
 fn test_default_state() {
     let dir = TempDir::new().unwrap();
-    let state = CliState::load(dir.path());
+    let state = CliState::load(&dir.path().join("data"));
     assert!(state.last_list.is_empty());
     assert!(state.current.is_none());
 }
@@ -20,9 +20,9 @@ fn test_save_and_reload() {
     let mut state = CliState::default();
     state.set_last_list(vec![id1, id2]);
     state.set_current(id2);
-    state.save(dir.path()).unwrap();
+    state.save(&dir.path().join("data")).unwrap();
 
-    let loaded = CliState::load(dir.path());
+    let loaded = CliState::load(&dir.path().join("data"));
     assert_eq!(loaded.last_list, vec![id1, id2]);
     assert_eq!(loaded.current, Some(id2));
 }

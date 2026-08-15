@@ -1,7 +1,8 @@
 use std::path::Path;
 
 pub fn init_workspace(data_dir: &Path) -> std::io::Result<()> {
-    let iwe_dir = data_dir.join(".iwe");
+    let config_dir = data_dir.parent().unwrap_or(data_dir);
+    let iwe_dir = config_dir.join(".iwe");
     std::fs::create_dir_all(&iwe_dir)?;
 
     let config_path = iwe_dir.join("config.toml");

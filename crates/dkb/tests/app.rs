@@ -124,7 +124,7 @@ fn test_editor_attached_close_emits_event_and_dismisses_modal(cx: &mut gpui::Tes
 fn test_editor_vi_ex_save_and_close_integration(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: true,
         line_numbers: true,
         theme_mode: ThemeMode::Dark,
@@ -225,7 +225,7 @@ fn test_settings_language_switch(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config_file = dir.path().join("config.toml");
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -288,7 +288,7 @@ fn test_settings_markdown_viewer_preference_switch(cx: &mut gpui::TestAppContext
     let dir = tempfile::tempdir().unwrap();
     let config_file = dir.path().join("config.toml");
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -338,7 +338,7 @@ fn test_settings_font_family_switch(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config_file = dir.path().join("config.toml");
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -393,7 +393,7 @@ fn test_open_new_main_window_action(cx: &mut gpui::TestAppContext) {
 fn test_open_in_markdown_viewer_action_runs_safely(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -426,7 +426,7 @@ fn test_open_in_markdown_viewer_action_runs_safely(cx: &mut gpui::TestAppContext
 fn test_right_click_context_menu_on_card(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::Dark,
@@ -522,7 +522,7 @@ fn test_right_click_context_menu_on_card(cx: &mut gpui::TestAppContext) {
 fn test_move_item_up_and_down_shortcuts(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -595,7 +595,7 @@ fn test_new_item_initial_header_prefix(cx: &mut gpui::TestAppContext) {
 fn test_editor_create_subitem_with_selection(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -640,7 +640,7 @@ fn test_editor_create_subitem_with_selection(cx: &mut gpui::TestAppContext) {
         .unwrap();
 
     // Verify sub-item file was created
-    let board = Storage::load_board(dir.path()).unwrap();
+    let board = Storage::load_board(&dir.path().join("data")).unwrap();
     let sub_item = board.active.today.iter().find(|i| i.title() == "Some details");
     assert!(sub_item.is_some());
 }
@@ -649,7 +649,7 @@ fn test_editor_create_subitem_with_selection(cx: &mut gpui::TestAppContext) {
 fn test_editor_create_subitem_prompt_modal(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -688,7 +688,7 @@ fn test_editor_create_subitem_prompt_modal(cx: &mut gpui::TestAppContext) {
         .unwrap();
 
     // Verify file created
-    let board = Storage::load_board(dir.path()).unwrap();
+    let board = Storage::load_board(&dir.path().join("data")).unwrap();
     let sub_item = board.active.today.iter().find(|i| i.title() == "Prompted Sub Item");
     assert!(sub_item.is_some());
 }
@@ -697,7 +697,7 @@ fn test_editor_create_subitem_prompt_modal(cx: &mut gpui::TestAppContext) {
 fn test_editor_follow_link_and_breadcrumb_navigation(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,
@@ -755,7 +755,7 @@ fn test_editor_follow_link_and_breadcrumb_navigation(cx: &mut gpui::TestAppConte
 fn test_editor_done_badge(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
-        data_dir: dir.path().to_path_buf(),
+        data_dir: dir.path().join("data").to_path_buf(),
         vi_mode: false,
         line_numbers: false,
         theme_mode: ThemeMode::System,

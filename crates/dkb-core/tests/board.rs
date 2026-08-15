@@ -7,7 +7,7 @@ use tempfile::TempDir;
 
 fn make_board_with_items() -> (TempDir, Board) {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().to_path_buf();
+    let data_dir = tmp.path().join("data").to_path_buf();
     Storage::init(&data_dir).unwrap();
 
     let backlog_item = Item::new("Backlog task");
@@ -128,23 +128,24 @@ fn test_move_item_from_done_clears_completed_at() {
 #[test]
 fn test_board_absolute_order_persistence() {
     let temp = TempDir::new().unwrap();
-    Storage::init(temp.path()).unwrap();
+    let data_dir = temp.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let item1 = Item::new("Item 1");
     let item2 = Item::new("Item 2");
     let item3 = Item::new("Item 3");
 
-    Storage::write_item(temp.path(), &item1, &Location::Active(Category::Today)).unwrap();
-    Storage::write_item(temp.path(), &item2, &Location::Active(Category::Today)).unwrap();
-    Storage::write_item(temp.path(), &item3, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item1, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item2, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item3, &Location::Active(Category::Today)).unwrap();
 
-    let mut board = Storage::load_board(temp.path()).unwrap();
+    let mut board = Storage::load_board(&data_dir).unwrap();
 
     // Explicit reorder: item3, item1, item2
     board.set_column_order(&Location::Active(Category::Today), vec![item3.id, item1.id, item2.id]);
-    Storage::save_board_state(temp.path(), &board).unwrap();
+    Storage::save_board_state(&data_dir, &board).unwrap();
 
-    let loaded_board = Storage::load_board(temp.path()).unwrap();
+    let loaded_board = Storage::load_board(&data_dir).unwrap();
     let today_ids: Vec<_> = loaded_board.active.today.iter().map(|i| i.id).collect();
     assert_eq!(today_ids, vec![item3.id, item1.id, item2.id]);
 }

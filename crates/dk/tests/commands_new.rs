@@ -44,16 +44,17 @@ fn test_build_item_empty_aborts() {
 fn test_new_item_saved_to_backlog_by_default() {
     let _guard = lock_env();
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
     let editor = install_fake_editor(dir.path(), "# Test task\\n");
     unsafe {
         std::env::set_var("VISUAL", &editor);
         std::env::remove_var("EDITOR");
     }
-    let id = dk::commands::new::run_new(dir.path(), None).unwrap();
-    let board = Storage::load_board(dir.path()).unwrap();
+    let id = dk::commands::new::run_new(&data_dir, None).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     assert!(board.backlog.iter().any(|i| i.id == id));
-    let state = CliState::load(dir.path());
+    let state = CliState::load(&data_dir);
     assert_eq!(state.current, Some(id));
 }
 
@@ -61,14 +62,15 @@ fn test_new_item_saved_to_backlog_by_default() {
 fn test_new_item_saved_to_category() {
     let _guard = lock_env();
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
     let editor = install_fake_editor(dir.path(), "# Today task\\n");
     unsafe {
         std::env::set_var("VISUAL", &editor);
         std::env::remove_var("EDITOR");
     }
-    let id = dk::commands::new::run_new(dir.path(), Some("today")).unwrap();
-    let board = Storage::load_board(dir.path()).unwrap();
+    let id = dk::commands::new::run_new(&data_dir, Some("today")).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     assert!(board.active.today.iter().any(|i| i.id == id));
 }
 
@@ -76,12 +78,13 @@ fn test_new_item_saved_to_category() {
 fn test_new_item_aborts_when_empty() {
     let _guard = lock_env();
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
     let editor = install_fake_editor(dir.path(), "# ");
     unsafe {
         std::env::set_var("VISUAL", &editor);
         std::env::remove_var("EDITOR");
     }
-    let result = dk::commands::new::run_new(dir.path(), None);
+    let result = dk::commands::new::run_new(&data_dir, None);
     assert!(result.is_err());
 }

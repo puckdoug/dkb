@@ -32,21 +32,22 @@ fn fake_editor(dir: &std::path::Path, content: &str) -> std::path::PathBuf {
 fn test_edit_current_item() {
     let _guard = lock_env();
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
     let item = Item::new("# Original");
-    Storage::write_item(dir.path(), &item, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item, &Location::Active(Category::Today)).unwrap();
     let mut state = CliState::default();
     state.set_current(item.id);
-    state.save(dir.path()).unwrap();
+    state.save(&data_dir).unwrap();
 
     let editor = fake_editor(dir.path(), "# Edited title");
     unsafe {
         std::env::set_var("VISUAL", &editor);
     }
 
-    run_edit(dir.path(), &[]).unwrap();
+    run_edit(&data_dir, &[]).unwrap();
 
-    let board = Storage::load_board(dir.path()).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     let edited = board.find_item(&item.id).unwrap();
     assert!(edited.body.contains("Edited title"));
 }
@@ -55,22 +56,23 @@ fn test_edit_current_item() {
 fn test_edit_by_index() {
     let _guard = lock_env();
     let dir = TempDir::new().unwrap();
-    Storage::init(dir.path()).unwrap();
+    let data_dir = dir.path().join("data");
+    Storage::init(&data_dir).unwrap();
     let i1 = Item::new("# first");
     let i2 = Item::new("# second");
-    Storage::write_item(dir.path(), &i1, &Location::Active(Category::Today)).unwrap();
-    Storage::write_item(dir.path(), &i2, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &i1, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &i2, &Location::Active(Category::Today)).unwrap();
     let mut state = CliState::default();
     state.set_last_list(vec![i1.id, i2.id]);
-    state.save(dir.path()).unwrap();
+    state.save(&data_dir).unwrap();
 
     let editor = fake_editor(dir.path(), "# changed");
     unsafe {
         std::env::set_var("VISUAL", &editor);
     }
 
-    run_edit(dir.path(), &["1".to_string()]).unwrap();
-    let board = Storage::load_board(dir.path()).unwrap();
+    run_edit(&data_dir, &["1".to_string()]).unwrap();
+    let board = Storage::load_board(&data_dir).unwrap();
     let edited = board.find_item(&i2.id).unwrap();
     assert!(edited.body.contains("changed"));
 }

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -10,9 +10,16 @@ pub struct CliState {
     pub current: Option<Uuid>,
 }
 
+fn state_file_path(data_dir: &Path) -> PathBuf {
+    match data_dir.parent() {
+        Some(p) => p.join("cli_state.json"),
+        None => data_dir.join("cli_state.json"),
+    }
+}
+
 impl CliState {
     pub fn load(data_dir: &Path) -> Self {
-        let path = data_dir.join("cli_state.json");
+        let path = state_file_path(data_dir);
         match std::fs::read_to_string(&path) {
             Ok(s) => match serde_json::from_str(&s) {
                 Ok(state) => state,
@@ -26,7 +33,7 @@ impl CliState {
     }
 
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
-        let path = data_dir.join("cli_state.json");
+        let path = state_file_path(data_dir);
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(path, content)

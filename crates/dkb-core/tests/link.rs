@@ -19,7 +19,8 @@ fn test_link_extraction() {
 #[test]
 fn test_recursive_subitem_count() {
     let temp = TempDir::new().unwrap();
-    Storage::init(temp.path()).unwrap();
+    let data_dir = temp.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let child_leaf = Item::new("Leaf child");
     let mut child_middle = Item::new("Middle child");
@@ -32,27 +33,28 @@ fn test_recursive_subitem_count() {
         .push_str(&format!("\n- [Middle]({}.md)", child_middle.id));
 
     Storage::write_item(
-        temp.path(),
+        &data_dir,
         &child_leaf,
         &Location::Active(Category::Today),
     )
     .unwrap();
     Storage::write_item(
-        temp.path(),
+        &data_dir,
         &child_middle,
         &Location::Active(Category::Today),
     )
     .unwrap();
-    Storage::write_item(temp.path(), &root, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &root, &Location::Active(Category::Today)).unwrap();
 
-    let count = count_recursive_subitems(root.id, temp.path());
+    let count = count_recursive_subitems(root.id, &data_dir);
     assert_eq!(count, 2);
 }
 
 #[test]
 fn test_subitem_cycle_detection() {
     let temp = TempDir::new().unwrap();
-    Storage::init(temp.path()).unwrap();
+    let data_dir = temp.path().join("data");
+    Storage::init(&data_dir).unwrap();
 
     let mut item1 = Item::new("Item 1");
     let mut item2 = Item::new("Item 2");
@@ -60,17 +62,18 @@ fn test_subitem_cycle_detection() {
     item1.body.push_str(&format!("\n- [[{}]]", item2.id));
     item2.body.push_str(&format!("\n- [[{}]]", item1.id));
 
-    Storage::write_item(temp.path(), &item1, &Location::Active(Category::Today)).unwrap();
-    Storage::write_item(temp.path(), &item2, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item1, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(&data_dir, &item2, &Location::Active(Category::Today)).unwrap();
 
-    let count = count_recursive_subitems(item1.id, temp.path());
+    let count = count_recursive_subitems(item1.id, &data_dir);
     assert_eq!(count, 1);
 }
 
 #[test]
 fn test_iwe_init_workspace() {
     let temp = TempDir::new().unwrap();
-    dkb_core::iwe::init_workspace(temp.path()).unwrap();
+    let data_dir = temp.path().join("data");
+    dkb_core::iwe::init_workspace(&data_dir).unwrap();
 
     let config_file = temp.path().join(".iwe").join("config.toml");
     assert!(config_file.exists());
