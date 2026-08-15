@@ -1960,7 +1960,7 @@ impl KanbanView {
                                             .on_mouse_down(
                                                 MouseButton::Left,
                                                 cx.listener(move |this, _, _window, cx| {
-                                                    if let Some(path) = crate::viewer::pick_viewer_file_dialog() {
+                                                    if let Some(path) = crate::viewer_dialog::pick_viewer_file_dialog() {
                                                         this.config.markdown_viewer = crate::viewer::ViewerPreference::Custom(path);
                                                         let _ = this.config.save_to(&Config::config_file_path());
                                                         cx.notify();

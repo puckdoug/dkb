@@ -1,12 +1,8 @@
-[package]
-name = "dkb"
-version = "0.1.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
+[workspace]
+members = ["crates/dkb-core", "crates/dkb", "crates/dk"]
+resolver = "2"
 
-[dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+[workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
@@ -14,12 +10,4 @@ toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 unicode-segmentation = "1.12"
-rfd = "0.15"
-
-[dev-dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
 tempfile = "3"
-
-[[bin]]
-name = "dkb"
-path = "src/bin/dkb.rs"

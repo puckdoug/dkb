@@ -22,17 +22,13 @@
     clippy::items_after_statements
 )]
 
-pub mod app;
 pub mod board;
 pub mod config;
-pub mod editor;
 pub mod i18n;
 pub mod item;
 pub mod iwe;
 pub mod link;
 pub mod storage;
 pub mod text_input;
-pub mod theme;
-pub mod vi;
 pub mod viewer;
-
+pub mod vi;

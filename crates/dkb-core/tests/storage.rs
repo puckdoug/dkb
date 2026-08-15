@@ -1,8 +1,8 @@
 #![allow(clippy::pedantic)]
 
-use dkb::board::{Board, BoardState};
-use dkb::item::{Category, Item, Status};
-use dkb::storage::{Location, Storage};
+use dkb_core::board::{Board, BoardState};
+use dkb_core::item::{Category, Item, Status};
+use dkb_core::storage::{Location, Storage};
 use std::path::PathBuf;
 use tempfile::TempDir;
 

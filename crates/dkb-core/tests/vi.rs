@@ -1,7 +1,7 @@
 #![allow(clippy::pedantic)]
 
-use dkb::text_input::TextInputState;
-use dkb::vi::{ExCommand, SearchDirection, ViActionResult, ViMode, ViState, VisualKind};
+use dkb_core::text_input::TextInputState;
+use dkb_core::vi::{ExCommand, SearchDirection, ViActionResult, ViMode, ViState, VisualKind};
 
 #[test]
 fn test_vi_mode_transitions() {

@@ -1,0 +1,26 @@
+[package]
+name = "dkb"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+dkb-core = { path = "../dkb-core" }
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+rfd = "0.15"
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+unicode-segmentation = { workspace = true }
+
+[dev-dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "dkb"
+path = "src/bin/dkb.rs"

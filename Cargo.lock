@@ -1357,13 +1357,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "dk"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dkb-core",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "dkb"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "dkb-core",
  "gpui",
  "gpui_platform",
  "rfd",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml 0.8.23",
+ "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
+name = "dkb-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -1,8 +1,8 @@
 #![allow(clippy::pedantic)]
 
-use dkb::board::{Board, BoardState};
-use dkb::item::{Category, Item};
-use dkb::storage::{Location, Storage};
+use dkb_core::board::{Board, BoardState};
+use dkb_core::item::{Category, Item};
+use dkb_core::storage::{Location, Storage};
 use tempfile::TempDir;
 
 fn make_board_with_items() -> (TempDir, Board) {

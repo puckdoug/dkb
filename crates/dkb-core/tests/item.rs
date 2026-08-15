@@ -1,7 +1,7 @@
 #![allow(clippy::pedantic)]
 
 use chrono::Utc;
-use dkb::item::{Category, Item, Status};
+use dkb_core::item::{Category, Item, Status};
 
 #[test]
 fn test_item_new_sets_title_from_first_line() {
@@ -94,13 +94,13 @@ fn test_parse_frontmatter_no_frontmatter() {
 
 #[test]
 fn test_clean_title_formatting() {
-    assert_eq!(dkb::item::Item::clean_title("# Heading One"), "Heading One");
-    assert_eq!(dkb::item::Item::clean_title("### Subheading"), "Subheading");
-    assert_eq!(dkb::item::Item::clean_title("**Bold Title**"), "Bold Title");
-    assert_eq!(dkb::item::Item::clean_title("*Italic Title*"), "Italic Title");
-    assert_eq!(dkb::item::Item::clean_title("`Code Title`"), "Code Title");
-    assert_eq!(dkb::item::Item::clean_title("[Link Title](https://example.com)"), "Link Title");
-    assert_eq!(dkb::item::Item::clean_title("~~Strikethrough~~"), "Strikethrough");
-    assert_eq!(dkb::item::Item::clean_title("## **Complex** `Title` with [Link](url)"), "Complex Title with Link");
+    assert_eq!(dkb_core::item::Item::clean_title("# Heading One"), "Heading One");
+    assert_eq!(dkb_core::item::Item::clean_title("### Subheading"), "Subheading");
+    assert_eq!(dkb_core::item::Item::clean_title("**Bold Title**"), "Bold Title");
+    assert_eq!(dkb_core::item::Item::clean_title("*Italic Title*"), "Italic Title");
+    assert_eq!(dkb_core::item::Item::clean_title("`Code Title`"), "Code Title");
+    assert_eq!(dkb_core::item::Item::clean_title("[Link Title](https://example.com)"), "Link Title");
+    assert_eq!(dkb_core::item::Item::clean_title("~~Strikethrough~~"), "Strikethrough");
+    assert_eq!(dkb_core::item::Item::clean_title("## **Complex** `Title` with [Link](url)"), "Complex Title with Link");
 }
 

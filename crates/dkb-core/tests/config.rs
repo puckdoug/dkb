@@ -1,8 +1,8 @@
 #![allow(clippy::pedantic)]
 
-use dkb::config::{Config, ThemeMode};
-use dkb::i18n::Language;
-use dkb::viewer::ViewerPreference;
+use dkb_core::config::{Config, ThemeMode};
+use dkb_core::i18n::Language;
+use dkb_core::viewer::ViewerPreference;
 use std::path::PathBuf;
 use tempfile::TempDir;
 

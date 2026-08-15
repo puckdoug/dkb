@@ -1,6 +1,6 @@
 #![allow(clippy::pedantic)]
 
-use dkb::viewer::{
+use dkb_core::viewer::{
     build_open_command, detect_default_viewer, resolve_viewer_path, ViewerPreference,
 };
 use std::path::PathBuf;
@@ -68,7 +68,7 @@ fn test_build_open_command_with_no_viewer() {
     let file_path = PathBuf::from("/tmp/test.md");
     // When custom path is not set and auto resolves to None (or mock None)
     // build_open_command_with_app should produce "open <file>"
-    let cmd = dkb::viewer::build_open_command_with_app(&file_path, None);
+    let cmd = dkb_core::viewer::build_open_command_with_app(&file_path, None);
     let args: Vec<&std::ffi::OsStr> = cmd.get_args().collect();
     assert_eq!(args, vec!["/tmp/test.md"]);
 }

@@ -1,11 +1,11 @@
 #![allow(clippy::pedantic)]
 
-use dkb::item::{Category, Item};
-use dkb::link::{
+use dkb_core::item::{Category, Item};
+use dkb_core::link::{
     count_recursive_subitems, extract_link_spans, extract_links, find_link_at_offset,
     format_markdown_link, LinkSpan,
 };
-use dkb::storage::{Location, Storage};
+use dkb_core::storage::{Location, Storage};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -70,7 +70,7 @@ fn test_subitem_cycle_detection() {
 #[test]
 fn test_iwe_init_workspace() {
     let temp = TempDir::new().unwrap();
-    dkb::iwe::init_workspace(temp.path()).unwrap();
+    dkb_core::iwe::init_workspace(temp.path()).unwrap();
 
     let config_file = temp.path().join(".iwe").join("config.toml");
     assert!(config_file.exists());

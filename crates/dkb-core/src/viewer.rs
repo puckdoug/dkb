@@ -70,9 +70,3 @@ pub fn open_in_viewer(file_path: &Path, pref: &ViewerPreference) -> std::io::Res
     Ok(())
 }
 
-#[must_use]
-pub fn pick_viewer_file_dialog() -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .add_filter("Applications", &["app"])
-        .pick_file()
-}

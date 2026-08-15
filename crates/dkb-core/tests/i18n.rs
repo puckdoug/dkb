@@ -1,6 +1,6 @@
 #![allow(clippy::pedantic)]
 
-use dkb::i18n::{detect_system_language, t, Language};
+use dkb_core::i18n::{detect_system_language, t, Language};
 
 #[test]
 fn test_supported_languages_count() {
