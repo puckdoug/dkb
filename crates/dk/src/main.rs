@@ -21,7 +21,7 @@ fn main() {
             std::process::exit(0);
         }
         "new" | "n" | "list" | "ls" | "pick" | "p" | "edit" | "ed" | "move" | "mv"
-        | "delete" | "rm" => {}
+        | "delete" | "rm" | "show" | "s" => {}
         other => {
             eprintln!("dk: unknown command: {other}");
             eprintln!();
@@ -53,6 +53,7 @@ fn main() {
             }
         }
         "edit" | "ed" => commands::edit::run_edit(&data_dir, rest),
+        "show" | "s" => commands::show::run_show(&data_dir, rest),
         "move" | "mv" => {
             if rest.len() < 2 {
                 Err(std::io::Error::other("move requires <selection> <category>"))
@@ -91,6 +92,7 @@ fn print_usage() {
     eprintln!("  list (ls)       List items with indices");
     eprintln!("  pick (p)        Set the current item");
     eprintln!("  edit (ed)       Edit one or more items via $EDITOR");
+    eprintln!("  show (s)        Display an item via $PAGER or stdout");
     eprintln!("  move (mv)       Move an item to a different category");
     eprintln!("  delete (rm)    Delete items (with confirmation)");
     eprintln!("  help            Show this help, or help for a command");
@@ -106,6 +108,7 @@ fn print_command_help(cmd: &str) {
         "edit" | "ed" => print_edit_help(),
         "move" | "mv" => print_move_help(),
         "delete" | "rm" => print_delete_help(),
+        "show" | "s" => print_show_help(),
         "help" => print_help_help(),
         other => {
             eprintln!("dk: unknown command for help: {other}");
@@ -215,5 +218,23 @@ fn print_help_help() {
     println!();
     println!("Show general help, or detailed help for a specific command.");
     println!();
-    println!("available commands: new, list, pick, edit, move, delete");
+    println!("available commands: new, list, pick, edit, show, move, delete");
+}
+
+fn print_show_help() {
+    println!("dk show [selection]    (alias: dk s)");
+    println!();
+    println!("Display an item's content. Uses $PAGER (default: less) when");
+    println!("output is a terminal. When piped, streams the raw content to");
+    println!("stdout without invoking a pager.");
+    println!();
+    println!("With no argument, shows the current item. Selection uses the");
+    println!("same mechanism as edit: a number, category/number, a bare");
+    println!("category, a uuid.md filename, or a full path.");
+    println!();
+    println!("examples:");
+    println!("  dk s                    # show current item");
+    println!("  dk show 3               # show item at index 3");
+    println!("  dk show backlog/0       # show first backlog item");
+    println!("  dk show 550e8400....md  # show by filename");
 }

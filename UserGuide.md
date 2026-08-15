@@ -464,6 +464,7 @@ The CLI keeps a small state file, `cli_state.json`, in the data directory. This 
 | `dk list [category]` | `dk ls` | List items and remember their indices. |
 | `dk pick <selection>` | `dk p` | Set the current item. |
 | `dk edit [selection...]` | `dk ed` | Open one or more items in your editor. |
+| `dk show [selection]` | `dk s` | Display an item via $PAGER or stdout. |
 | `dk move <selection> <category>` | `dk mv` | Move an item to a different column. |
 | `dk delete [selection...] [-f]` | `dk rm` | Delete items, with confirmation. |
 
@@ -551,6 +552,17 @@ dk edit 3              # edit index 3
 dk edit 3 5 9          # edit several items sequentially
 dk edit 550e8400-e29b-41d4-a716-446655440000.md
 dk edit backlog/2      # edit the third Backlog item
+```
+
+### `dk show` / `dk s`
+
+Displays an item's content. When output is a terminal, uses `$PAGER` (defaulting to `less`). When piped, streams the raw content to stdout without invoking a pager. With no argument, shows the current item. Selection uses the same mechanism as edit.
+
+```
+dk s                    # show current item
+dk show 3               # show item at index 3
+dk show backlog/0       # show first Backlog item
+dk show 550e8400-e29b-41d4-a716-446655440000.md
 ```
 
 ### `dk move` / `dk mv`
