@@ -204,6 +204,11 @@ impl ItemEditor {
     }
 
     pub fn on_backspace(&mut self, _: &EditorBackspace, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            self.subitem_prompt_text.pop();
+            cx.notify();
+            return;
+        }
         if self.config.vi_mode && matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
             let action = self.vi_state.handle_key("backspace", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -214,6 +219,9 @@ impl ItemEditor {
     }
 
     pub fn on_delete(&mut self, _: &EditorDelete, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode && matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
             let action = self.vi_state.handle_key("backspace", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -224,6 +232,9 @@ impl ItemEditor {
     }
 
     pub fn on_up(&mut self, _: &EditorUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
             let action = self.vi_state.handle_key("k", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -234,6 +245,9 @@ impl ItemEditor {
     }
 
     pub fn on_down(&mut self, _: &EditorDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
             let action = self.vi_state.handle_key("j", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -244,6 +258,9 @@ impl ItemEditor {
     }
 
     pub fn on_left(&mut self, _: &EditorLeft, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
             let action = self.vi_state.handle_key("h", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -254,6 +271,9 @@ impl ItemEditor {
     }
 
     pub fn on_right(&mut self, _: &EditorRight, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
             let action = self.vi_state.handle_key("l", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -263,22 +283,34 @@ impl ItemEditor {
         cx.notify();
     }
 
-    pub fn on_select_up(&mut self, _: &EditorSelectUp, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_select_up(&mut self, _: &EditorSelectUp, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.select_up();
         cx.notify();
     }
 
-    pub fn on_select_down(&mut self, _: &EditorSelectDown, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_select_down(&mut self, _: &EditorSelectDown, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.select_down();
         cx.notify();
     }
 
-    pub fn on_select_left(&mut self, _: &EditorSelectLeft, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_select_left(&mut self, _: &EditorSelectLeft, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.select_left();
         cx.notify();
     }
 
-    pub fn on_select_right(&mut self, _: &EditorSelectRight, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_select_right(&mut self, _: &EditorSelectRight, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.select_right();
         cx.notify();
     }
@@ -304,6 +336,10 @@ impl ItemEditor {
     }
 
     pub fn on_escape(&mut self, _: &EditorEscape, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            self.cancel_subitem_prompt(cx);
+            return;
+        }
         if self.config.vi_mode {
             let action = self.vi_state.handle_key("escape", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -312,21 +348,33 @@ impl ItemEditor {
     }
 
     pub fn on_select_all(&mut self, _: &EditorSelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.select_all();
         cx.notify();
     }
 
     pub fn on_undo(&mut self, _: &EditorUndo, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.undo();
         cx.notify();
     }
 
     pub fn on_redo(&mut self, _: &EditorRedo, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         self.state.redo();
         cx.notify();
     }
 
     pub fn on_paste(&mut self, _: &EditorPaste, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
             self.state.insert(&text);
             cx.notify();
@@ -334,6 +382,9 @@ impl ItemEditor {
     }
 
     pub fn on_copy(&mut self, _: &EditorCopy, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         let range = self.state.selected_range();
         if !range.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(
@@ -343,6 +394,9 @@ impl ItemEditor {
     }
 
     pub fn on_cut(&mut self, _: &EditorCut, _: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            return;
+        }
         let range = self.state.selected_range();
         if !range.is_empty() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(
