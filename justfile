@@ -17,3 +17,5 @@ run:
 
 pkg:
   ./scripts/bundle_macos.sh
+
+package: pkg

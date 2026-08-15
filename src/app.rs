@@ -400,7 +400,7 @@ impl Render for KanbanView {
                             .child(self.render_tab(crate::i18n::t("tab.done", self.config.language), Screen::Done, theme, cx)),
                     )
                     .child(
-                        self.render_tab(&format!("{} ⌘,", crate::i18n::t("tab.settings", self.config.language)), Screen::Settings, theme, cx),
+                        self.render_tab(crate::i18n::t("tab.settings", self.config.language), Screen::Settings, theme, cx),
                     ),
             )
             // Breadcrumbs bar (if drilled down)
