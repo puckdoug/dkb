@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 dkb-core = { path = "../dkb-core" }
 uuid = { workspace = true }
 chrono = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
