@@ -33,15 +33,14 @@ pub fn parse_selection(arg: &str) -> Selection {
     {
         return Selection::Index(n);
     }
+    if parse_category(trimmed).is_some() {
+        return Selection::Current;
+    }
     let stripped = trimmed.strip_suffix(".md").unwrap_or(trimmed);
     if let Ok(id) = Uuid::parse_str(stripped) {
         return Selection::File(id);
     }
-    let path = PathBuf::from(trimmed);
-    if path.is_absolute() || path.exists() {
-        return Selection::Path(path);
-    }
-    Selection::Path(path)
+    Selection::Path(PathBuf::from(trimmed))
 }
 
 #[allow(clippy::missing_errors_doc)]
@@ -59,7 +58,7 @@ pub fn resolve_selection(
         Selection::CategoryIndex(loc, n) => {
             let ids: Vec<Uuid> = items_for_location(board, *loc).into_iter().map(|i| i.id).collect();
             ids.get(*n).copied().ok_or_else(|| {
-                format!("index {n} out of range for {} ({})", loc_display(*loc), ids.len())
+                format!("index {n} out of range for {} ({})", loc.display_name(), ids.len())
             })
         }
         Selection::File(id) => {
@@ -89,16 +88,5 @@ fn items_for_location(board: &Board, loc: Location) -> Vec<&Item> {
         Location::Active(Category::ThisWeek) => board.active.this_week.iter().collect(),
         Location::Active(Category::NextWeek) => board.active.next_week.iter().collect(),
         Location::Done => board.done.iter().collect(),
-    }
-}
-
-fn loc_display(loc: Location) -> &'static str {
-    match loc {
-        Location::Backlog => "backlog",
-        Location::Active(Category::Yesterday) => "yesterday",
-        Location::Active(Category::Today) => "today",
-        Location::Active(Category::ThisWeek) => "this_week",
-        Location::Active(Category::NextWeek) => "next_week",
-        Location::Done => "done",
     }
 }

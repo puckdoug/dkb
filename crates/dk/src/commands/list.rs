@@ -55,9 +55,9 @@ pub fn run_list(data_dir: &Path, category_arg: Option<&str>) -> std::io::Result<
     let board = Storage::load_board(data_dir)?;
     let width = terminal_width();
 
-    let (items, ids): (Vec<Item>, Vec<Uuid>) = if let Some(loc) =
-        category_arg.and_then(parse_category)
-    {
+    let (items, ids): (Vec<Item>, Vec<Uuid>) = if let Some(s) = category_arg {
+        let loc = parse_category(s)
+            .ok_or_else(|| std::io::Error::other(format!("unknown category: {s}")))?;
         let items = collect_items(&board, &loc);
         let ids = items.iter().map(|i| i.id).collect();
         (items, ids)

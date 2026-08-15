@@ -2,7 +2,7 @@ use std::path::Path;
 
 use dkb_core::cli_state::CliState;
 use dkb_core::item::Item;
-use dkb_core::storage::{Location, Storage};
+use dkb_core::storage::Storage;
 
 use crate::category::parse_category;
 use crate::select::{parse_selection, resolve_selection};
@@ -25,17 +25,6 @@ pub fn run_move(data_dir: &Path, selection_arg: &str, dest_arg: &str) -> std::io
     Storage::move_item(data_dir, &id, &from, &dest)?;
 
     let title = board.find_item(&id).map(Item::title).unwrap_or_default();
-    println!("moved: {title} -> {}", loc_display(dest));
+    println!("moved: {title} -> {}", dest.display_name());
     Ok(())
-}
-
-fn loc_display(loc: Location) -> &'static str {
-    match loc {
-        Location::Backlog => "backlog",
-        Location::Active(dkb_core::item::Category::Yesterday) => "yesterday",
-        Location::Active(dkb_core::item::Category::Today) => "today",
-        Location::Active(dkb_core::item::Category::ThisWeek) => "this_week",
-        Location::Active(dkb_core::item::Category::NextWeek) => "next_week",
-        Location::Done => "done",
-    }
 }

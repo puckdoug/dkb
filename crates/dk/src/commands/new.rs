@@ -40,9 +40,11 @@ pub fn is_empty_body(body: &str) -> bool {
 /// launched or exits non-zero, the edited file cannot be read back, the body is
 /// empty, or persisting the item or CLI state fails.
 pub fn run_new(data_dir: &Path, category_arg: Option<&str>) -> std::io::Result<Uuid> {
-    let location = category_arg
-        .and_then(parse_category)
-        .unwrap_or(Location::Backlog);
+    let location = match category_arg {
+        Some(s) => parse_category(s)
+            .ok_or_else(|| std::io::Error::other(format!("unknown category: {s}")))?,
+        None => Location::Backlog,
+    };
 
     let id = Uuid::new_v4();
     let mut tmp = tempfile::NamedTempFile::new()?;

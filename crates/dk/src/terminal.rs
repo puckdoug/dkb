@@ -1,6 +1,9 @@
 #[must_use]
 pub fn terminal_width() -> usize {
-    80
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(80)
 }
 
 #[must_use]

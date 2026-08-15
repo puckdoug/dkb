@@ -1,8 +1,7 @@
 #![allow(clippy::pedantic)]
 
 use dkb_core::cli_state::CliState;
-use dkb_core::item::Category;
-use dkb_core::storage::{Location, Storage};
+use dkb_core::storage::Storage;
 use dk::commands::new::build_item_from_body;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::{Mutex, MutexGuard};
@@ -85,12 +84,4 @@ fn test_new_item_aborts_when_empty() {
     }
     let result = dk::commands::new::run_new(dir.path(), None);
     assert!(result.is_err());
-}
-
-#[test]
-fn test_parse_category_location() {
-    assert_eq!(
-        dkb_core::storage::Location::Active(Category::Today),
-        Location::Active(Category::Today)
-    );
 }

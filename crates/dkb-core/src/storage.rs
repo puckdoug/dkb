@@ -53,6 +53,18 @@ impl Location {
             _ => None,
         }
     }
+
+    #[must_use]
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Location::Backlog => "backlog",
+            Location::Active(Category::Yesterday) => "yesterday",
+            Location::Active(Category::Today) => "today",
+            Location::Active(Category::ThisWeek) => "this_week",
+            Location::Active(Category::NextWeek) => "next_week",
+            Location::Done => "done",
+        }
+    }
 }
 
 pub struct Storage;

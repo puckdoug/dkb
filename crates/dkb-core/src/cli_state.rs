@@ -13,10 +13,16 @@ pub struct CliState {
 impl CliState {
     pub fn load(data_dir: &Path) -> Self {
         let path = data_dir.join("cli_state.json");
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        match std::fs::read_to_string(&path) {
+            Ok(s) => match serde_json::from_str(&s) {
+                Ok(state) => state,
+                Err(_) => {
+                    eprintln!("warning: corrupted cli_state.json, resetting to defaults");
+                    Self::default()
+                }
+            },
+            Err(_) => Self::default(),
+        }
     }
 
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
