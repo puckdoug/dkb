@@ -284,6 +284,10 @@ impl ItemEditor {
     }
 
     pub fn on_enter(&mut self, _: &EditorEnter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.subitem_prompt_open {
+            self.confirm_subitem_prompt(window, cx);
+            return;
+        }
         if self.config.vi_mode {
             if matches!(self.vi_state.mode, ViMode::Command | ViMode::Search(_)) {
                 let action = self.vi_state.handle_key("enter", &mut self.state);
