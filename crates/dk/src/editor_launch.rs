@@ -20,7 +20,7 @@ pub fn resolve_editor() -> String {
 /// # Errors
 ///
 /// Returns an error if the editor process cannot be spawned or exits with a non-zero status.
-pub fn launch_editor(path: &Path, cursor_line: usize, cursor_col: usize) -> std::io::Result<()> {
+pub fn launch_editor(path: &Path, cursor_line: usize, _cursor_col: usize) -> std::io::Result<()> {
     let editor = resolve_editor();
     let mut parts = editor.split_whitespace();
     let binary = parts.next().unwrap_or("vi");
@@ -28,7 +28,9 @@ pub fn launch_editor(path: &Path, cursor_line: usize, cursor_col: usize) -> std:
     for extra in parts {
         cmd.arg(extra);
     }
-    cmd.arg(format!("+{cursor_line}:{cursor_col}"));
+    if cursor_line > 0 {
+        cmd.arg(format!("+{cursor_line}"));
+    }
     cmd.arg(path);
     let status = cmd.status()?;
     if !status.success() {
