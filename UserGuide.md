@@ -59,7 +59,7 @@ The Active tab is the primary workspace. It displays four columns side by side:
 
 | Column | Purpose |
 |--------|---------|
-| **Yesterday** | Items you worked on or planned for the previous day. |
+| **Yesterday** | Items you worked on or planned for the previous day. Items from the Today column automatically roll over into Yesterday on the next day. |
 | **Today** | Items you are working on right now. New items created from the Active tab default to this column. |
 | **This Week** | Items planned for the current week but not necessarily today. |
 | **Next Week** | Items planned for the upcoming week. |
@@ -122,18 +122,22 @@ The Done tab shows all completed items in a single column. Items here have a `co
 
 | Action | Shortcut | Result |
 |--------|----------|--------|
-| New item | `⌘ N` | Opens a blank editor modal. On save, the item is placed in the current screen's default column. |
-| New sub-item | `⇧ ⌘ N` | Creates a new item and links it from the currently selected parent. Opens the editor for the new sub-item. |
+| New item | `⌘ N` | Opens an editor modal with the first line initialized to `# ` for the header. On save, the item is placed in the current screen's default column. |
+| New sub-item (from board) | `⇧ ⌘ N` | Creates a new item and links it from the currently selected parent. Opens the editor for the new sub-item. |
+| New sub-item (from editor) | `⌘ K` | If text is selected, turns the selection into a sub-item link and creates the file. If no text is selected, prompts for the sub-item title and inserts the link at the cursor. Also available via editor right-click. |
 
 When creating a new item from the Active tab, it goes to **Today**. From the Backlog or Done tab, it goes to **Backlog**.
 
 ### Editing items
 
-Press `Enter` or double-click a card to open the integrated Markdown editor (see Section 8). The editor opens as a modal overlay. You can:
+Press `Enter` or double-click a card to open the integrated Markdown editor (see Section 8). The editor opens as a modal overlay with fixed-width typography matching the line numbers gutter. You can:
 
+- **Follow a link** by pressing `⌘ Enter` while the cursor is on or inside a link, or by `⌘ Click`ing the link.
+- **Navigate back** to a parent item via `⌘ ←` / `⌘ [` or by clicking parent items in the editor breadcrumbs bar.
 - **Save** with `⌘ S` or the Save button.
 - **Cancel** with the Cancel button (discards changes if the item is new; for existing items, unsaved edits are lost).
 - **Tear off** the editor into a separate window by clicking the window icon (⧉) in the editor's top bar.
+- If the item is marked done, a green `✅ Done` badge is displayed in the editor top bar.
 
 ### Sub-item hierarchy
 
@@ -263,6 +267,10 @@ These work in both Vi and non-Vi modes:
 | Shortcut | Action |
 |----------|--------|
 | `⌘ S` | Save |
+| `⌘ K` | Create sub-item (from selection or prompt) |
+| `⌘ Enter` | Follow link under cursor |
+| `⌘ Click` | Follow clicked link |
+| `⌘ ←` / `⌘ [` | Navigate back to parent item |
 | `⌘ A` | Select all |
 | `⌘ C` | Copy |
 | `⌘ X` | Cut |
@@ -274,6 +282,12 @@ These work in both Vi and non-Vi modes:
 | `Enter` | Insert newline |
 | `Backspace` / `Delete` | Delete character |
 | `Esc` | Return to Normal mode (Vi mode only) |
+
+### Cursor and typography
+
+- **Cursor display:** In Vi Normal/Command mode, the cursor appears as a solid, blinking box. In Edit/Insert mode, the cursor appears as a blinking vertical line. The cursor is always visible and blinks smoothly when focused.
+- **Typography:** The editor uses a fixed-width monospace font (Menlo by default, configurable in Settings). The line-number gutter matches the editor text font family, size, and line height.
+- **Default header:** Newly created items automatically open with `# ` on the first line and the cursor placed after it for immediate title entry.
 
 ### Vi mode
 
@@ -489,11 +503,15 @@ The viewer is configured in Settings (see Section 7). If set to Auto-Detect, the
 | `⌘ Delete` | Delete selected item |
 | `⌘ Backspace` | Delete selected item |
 
-### Editor (non-Vi)
+### Editor (non-Vi and general editor shortcuts)
 
 | Shortcut | Action |
 |----------|--------|
 | `⌘ S` | Save editor content |
+| `⌘ K` | Create sub-item (from selection or prompt) |
+| `⌘ Enter` | Follow link under cursor |
+| `⌘ Click` | Follow clicked link |
+| `⌘ ←` / `⌘ [` | Navigate back to parent item |
 | `⌘ A` | Select all |
 | `⌘ C` | Copy |
 | `⌘ X` | Cut |

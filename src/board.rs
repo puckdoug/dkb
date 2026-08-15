@@ -9,6 +9,8 @@ use uuid::Uuid;
 pub struct BoardState {
     pub version: u32,
     pub order: HashMap<String, Vec<Uuid>>,
+    #[serde(default)]
+    pub last_active_date: Option<chrono::NaiveDate>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -78,6 +80,7 @@ impl Board {
         BoardState {
             version: 1,
             order,
+            last_active_date: None,
         }
     }
 

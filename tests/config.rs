@@ -22,6 +22,7 @@ fn test_config_load_creates_default_when_missing() {
     assert!(config.data_dir.to_string_lossy().contains("dkb"));
     assert_eq!(config.language, Language::Auto);
     assert_eq!(config.markdown_viewer, ViewerPreference::Auto);
+    assert_eq!(config.font_family, "Menlo");
 }
 
 #[test]
@@ -61,6 +62,7 @@ fn test_config_defaults_and_serialization() {
     assert_eq!(config.theme_mode, ThemeMode::System);
     assert_eq!(config.language, Language::Auto);
     assert_eq!(config.markdown_viewer, ViewerPreference::Auto);
+    assert_eq!(config.font_family, "Menlo");
 
     let updated = Config {
         data_dir: temp.path().join("custom_data"),
@@ -69,6 +71,7 @@ fn test_config_defaults_and_serialization() {
         theme_mode: ThemeMode::Dark,
         language: Language::Ja,
         markdown_viewer: ViewerPreference::Custom(PathBuf::from("/Applications/Marked 2.app")),
+        font_family: "JetBrains Mono".to_string(),
     };
     updated.save_to(&config_path).unwrap();
 
@@ -81,6 +84,7 @@ fn test_config_defaults_and_serialization() {
         reloaded.markdown_viewer,
         ViewerPreference::Custom(PathBuf::from("/Applications/Marked 2.app"))
     );
+    assert_eq!(reloaded.font_family, "JetBrains Mono");
     assert_eq!(reloaded.data_dir, temp.path().join("custom_data"));
 }
 
@@ -101,4 +105,33 @@ fn test_config_viewer_expands_tilde() {
     } else {
         panic!("Expected ViewerPreference::Custom");
     }
+}
+
+#[test]
+fn test_config_font_family_default_and_serialization() {
+    let config = Config::default();
+    assert_eq!(config.font_family, "Menlo");
+    let serialized = toml::to_string(&config).unwrap();
+    let deserialized: Config = toml::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.font_family, "Menlo");
+}
+
+#[test]
+fn test_monospace_fonts_list() {
+    assert!(Config::MONOSPACE_FONTS.contains(&"Menlo"));
+    assert!(Config::MONOSPACE_FONTS.contains(&"SF Mono"));
+    assert!(Config::MONOSPACE_FONTS.contains(&"JetBrains Mono"));
+    assert_eq!(
+        Config::MONOSPACE_FONTS,
+        &[
+            "Menlo",
+            "SF Mono",
+            "Monaco",
+            "Courier New",
+            "Courier",
+            "Consolas",
+            "Fira Code",
+            "JetBrains Mono"
+        ]
+    );
 }

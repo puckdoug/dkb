@@ -3,6 +3,21 @@ use crate::viewer::ViewerPreference;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub const MONOSPACE_FONTS: &[&str] = &[
+    "Menlo",
+    "SF Mono",
+    "Monaco",
+    "Courier New",
+    "Courier",
+    "Consolas",
+    "Fira Code",
+    "JetBrains Mono",
+];
+
+fn default_font_family() -> String {
+    "Menlo".to_string()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeMode {
@@ -25,9 +40,27 @@ pub struct Config {
     pub language: Language,
     #[serde(default)]
     pub markdown_viewer: ViewerPreference,
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            data_dir: Self::default_data_dir(),
+            vi_mode: false,
+            line_numbers: false,
+            theme_mode: ThemeMode::System,
+            language: Language::Auto,
+            markdown_viewer: ViewerPreference::Auto,
+            font_family: default_font_family(),
+        }
+    }
 }
 
 impl Config {
+    pub const MONOSPACE_FONTS: &[&str] = MONOSPACE_FONTS;
+
     pub fn default_data_dir() -> PathBuf {
         if let Some(home) = std::env::var_os("HOME") {
             PathBuf::from(home).join("Library/Application Support/dkb")
@@ -46,28 +79,13 @@ impl Config {
 
     pub fn load_from(config_path: &Path) -> std::io::Result<Self> {
         if !config_path.exists() {
-            let default_config = Self {
-                data_dir: Self::default_data_dir(),
-                vi_mode: false,
-                line_numbers: false,
-                theme_mode: ThemeMode::System,
-                language: Language::Auto,
-                markdown_viewer: ViewerPreference::Auto,
-            };
+            let default_config = Self::default();
             default_config.save_to(config_path)?;
             return Ok(default_config);
         }
 
         let content = std::fs::read_to_string(config_path)?;
-        let mut config: Config = toml::from_str(&content)
-            .unwrap_or_else(|_| Config {
-                data_dir: Self::default_data_dir(),
-                vi_mode: false,
-                line_numbers: false,
-                theme_mode: ThemeMode::System,
-                language: Language::Auto,
-                markdown_viewer: ViewerPreference::Auto,
-            });
+        let mut config: Config = toml::from_str(&content).unwrap_or_default();
         
         config.data_dir = Self::expand_tilde(&config.data_dir.to_string_lossy());
         if let ViewerPreference::Custom(ref path) = config.markdown_viewer {

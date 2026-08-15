@@ -21,10 +21,11 @@ use crate::board::Board;
 use crate::config::{Config, ThemeMode};
 use crate::i18n::Language;
 use crate::editor::{
-    CloseWindow, EditorBackspace, EditorCopy, EditorCut, EditorDelete, EditorDown, EditorEnter,
-    EditorEscape, EditorEvent, EditorLeft, EditorPaste, EditorRedo, EditorRight, EditorSelectAll,
-    EditorSelectDown, EditorSelectLeft, EditorSelectRight, EditorSelectUp, EditorUndo, EditorUp,
-    ItemEditor, SaveEditor,
+    CloseWindow, EditorBackspace, EditorCopy, EditorCreateSubItem, EditorCut, EditorDelete,
+    EditorDown, EditorEnter, EditorEscape, EditorEvent, EditorFollowLink, EditorLeft,
+    EditorNavigateBack, EditorPaste, EditorRedo, EditorRight, EditorSelectAll, EditorSelectDown,
+    EditorSelectLeft, EditorSelectRight, EditorSelectUp, EditorUndo, EditorUp, ItemEditor,
+    SaveEditor,
 };
 use crate::item::{Category, Item, Status};
 use crate::link::count_recursive_subitems;
@@ -142,18 +143,12 @@ pub struct KanbanView {
     pub drill_down_stack: Vec<Uuid>,
     pub context_menu: Option<ContextMenuState>,
     pub language_dropdown_open: bool,
+    pub font_dropdown_open: bool,
 }
 
 impl KanbanView {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let config = Config::load().unwrap_or_else(|_| Config {
-            data_dir: Config::default_data_dir(),
-            vi_mode: false,
-            line_numbers: false,
-            theme_mode: ThemeMode::System,
-            language: Language::Auto,
-            markdown_viewer: crate::viewer::ViewerPreference::Auto,
-        });
+        let config = Config::load().unwrap_or_default();
         Storage::init(&config.data_dir).ok();
         let board = Storage::load_board(&config.data_dir).unwrap_or_default();
 
@@ -167,6 +162,7 @@ impl KanbanView {
             drill_down_stack: Vec::new(),
             context_menu: None,
             language_dropdown_open: false,
+            font_dropdown_open: false,
         }
     }
 
@@ -228,6 +224,8 @@ impl KanbanView {
             KeyBinding::new("cmd-d", ToggleDone, Some("KanbanView")),
             KeyBinding::new("delete", DeleteItem, Some("KanbanView")),
             KeyBinding::new("backspace", DeleteItem, Some("KanbanView")),
+            KeyBinding::new("cmd-backspace", DeleteItem, Some("KanbanView")),
+            KeyBinding::new("cmd-delete", DeleteItem, Some("KanbanView")),
             KeyBinding::new("tab", NextItem, Some("KanbanView")),
             KeyBinding::new("shift-tab", PrevItem, Some("KanbanView")),
             // Editor keybindings
@@ -251,6 +249,10 @@ impl KanbanView {
             KeyBinding::new("delete", EditorDelete, Some("ItemEditor")),
             KeyBinding::new("enter", EditorEnter, Some("ItemEditor")),
             KeyBinding::new("escape", EditorEscape, Some("ItemEditor")),
+            KeyBinding::new("cmd-k", EditorCreateSubItem, Some("ItemEditor")),
+            KeyBinding::new("cmd-enter", EditorFollowLink, Some("ItemEditor")),
+            KeyBinding::new("cmd-left", EditorNavigateBack, Some("ItemEditor")),
+            KeyBinding::new("cmd-[", EditorNavigateBack, Some("ItemEditor")),
         ]
     }
 
@@ -332,10 +334,12 @@ impl Render for KanbanView {
         let theme = self.theme(cx);
         let screen = self.current_screen;
 
-        // Focus the editor when it opens
+        // Focus the editor when it opens, or focus the main board when closed
         if let Some(ref editing) = self.editing {
             let focus = editing.editor.read(cx).focus_handle.clone();
             window.focus(&focus, cx);
+        } else {
+            window.focus(&self.focus_handle, cx);
         }
 
         div()
@@ -508,9 +512,11 @@ impl KanbanView {
     pub fn on_close_window(&mut self, _: &CloseWindow, window: &mut Window, cx: &mut Context<Self>) {
         if self.context_menu.is_some() {
             self.context_menu = None;
+            window.focus(&self.focus_handle, cx);
             cx.notify();
         } else if self.editing.is_some() {
             self.editing = None;
+            window.focus(&self.focus_handle, cx);
             cx.notify();
         } else {
             window.remove_window();
@@ -987,13 +993,14 @@ impl KanbanView {
         cx.notify();
     }
 
-    pub fn on_save_editor(&mut self, _: &SaveEditor, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_save_editor(&mut self, _: &SaveEditor, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editing) = self.editing.take() else {
             return;
         };
         let content = editing.editor.read(cx).content().to_string();
         let title = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("").to_string();
         if title.is_empty() {
+            window.focus(&self.focus_handle, cx);
             cx.notify();
             return;
         }
@@ -1025,11 +1032,13 @@ impl KanbanView {
                 let _ = Storage::write_item(&self.config.data_dir, &item, &location);
             }
         }
+        window.focus(&self.focus_handle, cx);
         cx.notify();
     }
 
-    pub fn on_cancel_editor(&mut self, _: &CancelEditor, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_cancel_editor(&mut self, _: &CancelEditor, window: &mut Window, cx: &mut Context<Self>) {
         self.editing = None;
+        window.focus(&self.focus_handle, cx);
         cx.notify();
     }
 
@@ -1675,6 +1684,114 @@ impl KanbanView {
                                 }),
                             )
                             .child(if line_numbers { "Enabled" } else { "Disabled" }),
+                    ),
+            )
+            // Font Family Section
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(crate::i18n::t("settings.font_family", self.config.language)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            // Dropdown Trigger Button
+                            .child(
+                                div()
+                                    .id("font-dropdown-trigger")
+                                    .flex()
+                                    .flex_row()
+                                    .justify_between()
+                                    .items_center()
+                                    .w(px(300.))
+                                    .px(px(12.))
+                                    .py(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(theme.bg_column)
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .text_sm()
+                                    .text_color(theme.text_primary)
+                                    .cursor_pointer()
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, _, _window, cx| {
+                                            this.font_dropdown_open = !this.font_dropdown_open;
+                                            cx.notify();
+                                        }),
+                                    )
+                                    .child(self.config.font_family.clone())
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.text_secondary)
+                                            .child(if self.font_dropdown_open { "▲" } else { "▼" }),
+                                    ),
+                            )
+                            // Dropdown List
+                            .children(if self.font_dropdown_open {
+                                let mut font_items: Vec<gpui::AnyElement> = Vec::new();
+                                for &font_name in Config::MONOSPACE_FONTS {
+                                    let is_active = font_name == self.config.font_family;
+                                    font_items.push(
+                                        div()
+                                            .id(SharedString::from(format!("font-opt-{}", font_name)))
+                                            .flex()
+                                            .flex_row()
+                                            .justify_between()
+                                            .items_center()
+                                            .px(px(12.))
+                                            .py(px(6.))
+                                            .rounded(px(3.))
+                                            .bg(if is_active { theme.bg_column } else { theme.bg_surface })
+                                            .font_family(font_name)
+                                            .text_sm()
+                                            .text_color(if is_active { theme.accent } else { theme.text_primary })
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _, _window, cx| {
+                                                    this.config.font_family = font_name.to_string();
+                                                    this.font_dropdown_open = false;
+                                                    let _ = this.config.save_to(&Config::config_file_path());
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child(font_name)
+                                            .children(if is_active {
+                                                Some(div().text_xs().text_color(theme.accent).child("✓"))
+                                            } else {
+                                                None
+                                            })
+                                            .into_any_element(),
+                                    );
+                                }
+                                Some(
+                                    div()
+                                        .id("font-dropdown-list")
+                                        .w(px(300.))
+                                        .max_h(px(220.))
+                                        .overflow_scroll()
+                                        .p(px(4.))
+                                        .rounded(px(6.))
+                                        .bg(theme.bg_surface)
+                                        .border_1()
+                                        .border_color(theme.border)
+                                        .shadow_md()
+                                        .children(font_items),
+                                )
+                            } else {
+                                None
+                            }),
                     ),
             )
             // Language Selection Section

@@ -1,5 +1,6 @@
 #![allow(clippy::pedantic)]
 
+use dkb::board::{Board, BoardState};
 use dkb::item::{Category, Item, Status};
 use dkb::storage::{Location, Storage};
 use std::path::PathBuf;
@@ -258,4 +259,77 @@ fn test_load_board_done_sorted_by_completed_at_desc() {
     assert_eq!(board.done.len(), 2);
     assert_eq!(board.done[0].title(), "Newer done");
     assert_eq!(board.done[1].title(), "Older done");
+}
+
+#[test]
+fn test_board_state_rollover_today_to_yesterday() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let data_dir = temp_dir.path();
+    Storage::init(data_dir).unwrap();
+
+    let today_item = Item::new("Task for today");
+    let yesterday_item = Item::new("Existing yesterday task");
+    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+    Storage::write_item(data_dir, &yesterday_item, &Location::Active(Category::Yesterday)).unwrap();
+
+    let state = BoardState {
+        version: 1,
+        order: std::collections::HashMap::new(),
+        last_active_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()),
+    };
+    Storage::save_board_state_with_date(data_dir, &Board::default(), state.last_active_date).unwrap();
+
+    let board = Storage::load_board(data_dir).unwrap();
+    assert_eq!(board.active.today.len(), 0);
+    assert_eq!(board.active.yesterday.len(), 2);
+    assert!(board.active.yesterday.iter().any(|i| i.id == today_item.id));
+    assert!(board.active.yesterday.iter().any(|i| i.id == yesterday_item.id));
+
+    // Check that files on disk were moved
+    let today_files: Vec<_> = std::fs::read_dir(data_dir.join("active/today")).unwrap().collect();
+    assert_eq!(today_files.len(), 0);
+    let yesterday_files: Vec<_> = std::fs::read_dir(data_dir.join("active/yesterday")).unwrap().collect();
+    assert_eq!(yesterday_files.len(), 2);
+}
+
+#[test]
+fn test_board_state_rollover_same_day_no_op() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let data_dir = temp_dir.path();
+    Storage::init(data_dir).unwrap();
+
+    let today_item = Item::new("Task for today");
+    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+
+    let today = chrono::Local::now().date_naive();
+    let state = BoardState {
+        version: 1,
+        order: std::collections::HashMap::new(),
+        last_active_date: Some(today),
+    };
+    Storage::save_board_state_with_date(data_dir, &Board::default(), state.last_active_date).unwrap();
+
+    let board = Storage::load_board(data_dir).unwrap();
+    assert_eq!(board.active.today.len(), 1);
+    assert_eq!(board.active.yesterday.len(), 0);
+    assert_eq!(board.active.today[0].id, today_item.id);
+}
+
+#[test]
+fn test_board_state_rollover_initializes_date_when_none() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let data_dir = temp_dir.path();
+    Storage::init(data_dir).unwrap();
+
+    let today_item = Item::new("Task for today");
+    Storage::write_item(data_dir, &today_item, &Location::Active(Category::Today)).unwrap();
+
+    // No board_state.json saved initially
+    let _board = Storage::load_board(data_dir).unwrap();
+
+    // After load_board, board_state.json should exist with today's date
+    let content = std::fs::read_to_string(data_dir.join("board_state.json")).unwrap();
+    let state: BoardState = serde_json::from_str(&content).unwrap();
+    let today = chrono::Local::now().date_naive();
+    assert_eq!(state.last_active_date, Some(today));
 }

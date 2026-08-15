@@ -164,12 +164,68 @@ impl Storage {
         })
     }
 
-    pub fn save_board_state(data_dir: &Path, board: &Board) -> std::io::Result<()> {
-        let state = board.to_board_state();
+    pub fn save_board_state_with_date(
+        data_dir: &Path,
+        board: &Board,
+        last_active_date: Option<chrono::NaiveDate>,
+    ) -> std::io::Result<()> {
+        let mut state = board.to_board_state();
+        state.last_active_date = last_active_date;
         let state_path = data_dir.join("board_state.json");
         let content = serde_json::to_string_pretty(&state)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(state_path, content)?;
+        Ok(())
+    }
+
+    pub fn save_board_state(data_dir: &Path, board: &Board) -> std::io::Result<()> {
+        let state_path = data_dir.join("board_state.json");
+        let existing_date = if let Ok(content) = std::fs::read_to_string(&state_path)
+            && let Ok(state) = serde_json::from_str::<BoardState>(&content)
+        {
+            state.last_active_date
+        } else {
+            Some(chrono::Local::now().date_naive())
+        };
+        Self::save_board_state_with_date(data_dir, board, existing_date)
+    }
+
+    pub fn check_and_apply_rollover(
+        data_dir: &Path,
+        board: &mut Board,
+        state: &mut BoardState,
+    ) -> std::io::Result<()> {
+        let today_date = chrono::Local::now().date_naive();
+        let needs_rollover = match state.last_active_date {
+            Some(last_date) => last_date < today_date,
+            None => false,
+        };
+
+        if needs_rollover {
+            let items_to_move = std::mem::take(&mut board.active.today);
+            for mut item in items_to_move {
+                let from_loc = Location::Active(Category::Today);
+                let to_loc = Location::Active(Category::Yesterday);
+                let from_path = data_dir.join(from_loc.to_path()).join(format!("{}.md", item.id));
+                let to_dir = data_dir.join(to_loc.to_path());
+                std::fs::create_dir_all(&to_dir)?;
+                let to_path = to_dir.join(format!("{}.md", item.id));
+
+                item.updated_at = Utc::now();
+                std::fs::write(&to_path, item.serialize())?;
+                if from_path.exists() {
+                    let _ = std::fs::remove_file(from_path);
+                }
+                board.active.yesterday.push(item);
+            }
+            *state = board.to_board_state();
+            state.last_active_date = Some(today_date);
+            Self::save_board_state_with_date(data_dir, board, state.last_active_date)?;
+        } else if state.last_active_date.is_none() {
+            state.last_active_date = Some(today_date);
+            Self::save_board_state_with_date(data_dir, board, state.last_active_date)?;
+        }
+
         Ok(())
     }
 
@@ -224,14 +280,24 @@ impl Storage {
         });
 
         let state_path = data_dir.join("board_state.json");
-        if let Ok(content) = std::fs::read_to_string(state_path)
-            && let Ok(state) = serde_json::from_str::<BoardState>(&content)
+        let mut state = if let Ok(content) = std::fs::read_to_string(&state_path)
+            && let Ok(loaded_state) = serde_json::from_str::<BoardState>(&content)
         {
-            for location in locations {
-                let key = location.to_path().to_string_lossy().to_string();
-                if let Some(ordered_ids) = state.order.get(&key) {
-                    board.set_column_order(&location, ordered_ids.clone());
-                }
+            loaded_state
+        } else {
+            BoardState {
+                version: 1,
+                order: std::collections::HashMap::new(),
+                last_active_date: None,
+            }
+        };
+
+        Self::check_and_apply_rollover(data_dir, &mut board, &mut state)?;
+
+        for location in locations {
+            let key = location.to_path().to_string_lossy().to_string();
+            if let Some(ordered_ids) = state.order.get(&key) {
+                board.set_column_order(&location, ordered_ids.clone());
             }
         }
 

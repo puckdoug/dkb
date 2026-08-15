@@ -59,6 +59,7 @@ pub struct ViState {
     pub yank_buffer: Option<String>,
     pub is_linewise_yank: bool,
     pub visual_anchor: Option<usize>,
+    pub visual_head: Option<usize>,
     pub command_buffer: String,
     pub search_buffer: String,
     pub last_search: Option<(String, SearchDirection)>,
@@ -88,6 +89,7 @@ impl ViState {
             yank_buffer: None,
             is_linewise_yank: false,
             visual_anchor: None,
+            visual_head: None,
             command_buffer: String::new(),
             search_buffer: String::new(),
             last_search: None,
@@ -238,9 +240,9 @@ impl ViState {
             || (key == "V" && kind == VisualKind::Line)
         {
             self.mode = ViMode::Normal;
+            let head = self.visual_head.take().unwrap_or_else(|| state.cursor_offset());
             self.visual_anchor = None;
-            let cur = state.cursor_offset();
-            state.move_to(cur);
+            state.move_to(head);
             return ViActionResult::Handled;
         }
 
@@ -267,6 +269,7 @@ impl ViState {
                 }
                 self.mode = ViMode::Normal;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             "c" | "s" => {
@@ -279,6 +282,7 @@ impl ViState {
                 }
                 self.mode = ViMode::Insert;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             "y" => {
@@ -290,6 +294,7 @@ impl ViState {
                 state.move_to(range.start.min(state.content().len()));
                 self.mode = ViMode::Normal;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             "~" => {
@@ -304,6 +309,7 @@ impl ViState {
                 }
                 self.mode = ViMode::Normal;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             ">" => {
@@ -313,6 +319,7 @@ impl ViState {
                 }
                 self.mode = ViMode::Normal;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             "<" => {
@@ -322,6 +329,7 @@ impl ViState {
                 }
                 self.mode = ViMode::Normal;
                 self.visual_anchor = None;
+                self.visual_head = None;
                 ViActionResult::Handled
             }
             _ => {
@@ -336,14 +344,23 @@ impl ViState {
     }
 
     fn update_visual_selection(&self, state: &mut TextInputState, kind: VisualKind) {
-        let anchor = self.visual_anchor.unwrap_or(state.cursor_offset());
-        let cur = state.cursor_offset();
+        let anchor = self.visual_anchor.unwrap_or_else(|| state.cursor_offset());
+        let cur = self.visual_head.unwrap_or_else(|| state.cursor_offset());
         let content = state.content();
+
+        if content.is_empty() {
+            return;
+        }
 
         match kind {
             VisualKind::Character => {
-                let start = anchor.min(cur);
-                let end = anchor.max(cur);
+                let (start, end) = if cur >= anchor {
+                    let char_len = content[cur..].chars().next().map_or(1, char::len_utf8);
+                    (anchor, (cur + char_len).min(content.len()))
+                } else {
+                    let anchor_char_len = content[anchor..].chars().next().map_or(1, char::len_utf8);
+                    (cur, (anchor + anchor_char_len).min(content.len()))
+                };
                 if cur < anchor {
                     state.move_to(end);
                     state.select_to(start);
@@ -360,17 +377,12 @@ impl ViState {
                 if end < content.len() && content.as_bytes()[end] == b'\n' {
                     end += 1;
                 }
-                let same_line = find_line_start(content, anchor) == find_line_start(content, cur);
                 if cur < anchor {
                     state.move_to(end);
                     state.select_to(start);
                 } else {
                     state.move_to(start);
                     state.select_to(end);
-                    if same_line {
-                        state.move_to(end);
-                        state.select_to(start);
-                    }
                 }
             }
         }
@@ -603,12 +615,17 @@ impl ViState {
             }
             "v" => {
                 self.mode = ViMode::Visual(VisualKind::Character);
-                self.visual_anchor = Some(state.cursor_offset());
+                let cur = state.cursor_offset();
+                self.visual_anchor = Some(cur);
+                self.visual_head = Some(cur);
+                self.update_visual_selection(state, VisualKind::Character);
                 ViActionResult::Handled
             }
             "V" => {
                 self.mode = ViMode::Visual(VisualKind::Line);
-                self.visual_anchor = Some(state.cursor_offset());
+                let cur = state.cursor_offset();
+                self.visual_anchor = Some(cur);
+                self.visual_head = Some(cur);
                 self.update_visual_selection(state, VisualKind::Line);
                 ViActionResult::Handled
             }
@@ -709,18 +726,47 @@ impl ViState {
                 ViActionResult::Handled
             }
             "x" => {
-                let count = self.take_count();
-                let cur = state.cursor_offset();
-                let content = state.content();
-                if cur < content.len() {
-                    let available = content[cur..].chars().take_while(|&c| c != '\n').count();
-                    let n = count.min(available).max(1);
-                    let delete_bytes: usize =
-                        content[cur..].chars().take(n).map(char::len_utf8).sum();
-                    self.yank_buffer = Some(content[cur..(cur + delete_bytes)].to_string());
-                    self.is_linewise_yank = false;
-                    state.replace_range(cur..(cur + delete_bytes), "");
-                    state.move_to(cur.min(state.content().len()));
+                let count = self.take_count().max(1);
+                for _ in 0..count {
+                    let cur = state.cursor_offset();
+                    let content = state.content();
+                    let line_start = find_line_start(content, cur);
+                    let line_end = find_line_end(content, cur);
+
+                    if line_start == line_end {
+                        break;
+                    }
+
+                    if cur < line_end {
+                        let char_len = content[cur..line_end].chars().next().map_or(1, char::len_utf8);
+                        self.yank_buffer = Some(content[cur..(cur + char_len)].to_string());
+                        self.is_linewise_yank = false;
+                        state.replace_range(cur..(cur + char_len), "");
+                        let new_content = state.content();
+                        let new_line_start = find_line_start(new_content, cur);
+                        let new_line_end = find_line_end(new_content, cur);
+                        if cur >= new_line_end && new_line_end > new_line_start {
+                            let last_char_len = new_content[new_line_start..new_line_end].chars().next_back().map_or(1, char::len_utf8);
+                            state.move_to(new_line_end - last_char_len);
+                        } else {
+                            state.move_to(cur.min(new_content.len()));
+                        }
+                    } else if cur >= line_end && cur > line_start {
+                        let prev_char_len = content[line_start..line_end].chars().next_back().map_or(1, char::len_utf8);
+                        let del_start = line_end - prev_char_len;
+                        self.yank_buffer = Some(content[del_start..line_end].to_string());
+                        self.is_linewise_yank = false;
+                        state.replace_range(del_start..line_end, "");
+                        let new_content = state.content();
+                        let new_line_start = find_line_start(new_content, del_start);
+                        let new_line_end = find_line_end(new_content, del_start);
+                        if del_start >= new_line_end && new_line_end > new_line_start {
+                            let last_char_len = new_content[new_line_start..new_line_end].chars().next_back().map_or(1, char::len_utf8);
+                            state.move_to(new_line_end - last_char_len);
+                        } else {
+                            state.move_to(del_start.min(new_content.len()));
+                        }
+                    }
                 }
                 ViActionResult::Handled
             }
@@ -957,25 +1003,29 @@ impl ViState {
     ) -> bool {
         let has_explicit_count = self.count.is_some();
         let count = self.take_count();
-        let cur = state.cursor_offset();
+        let cur = if is_visual {
+            self.visual_head.unwrap_or_else(|| state.cursor_offset())
+        } else {
+            state.cursor_offset()
+        };
         let content = state.content();
 
         let (target, is_linewise) = match key {
-            "h" => {
+            "h" | "left" | "Left" => {
                 let line_start = find_line_start(content, cur);
                 let target = cur.saturating_sub(count).max(line_start);
                 (target, false)
             }
-            "l" => {
+            "l" | "right" | "Right" | " " | "space" | "Space" => {
                 let line_end = find_line_end(content, cur);
                 let target = (cur + count).min(line_end);
                 (target, false)
             }
-            "j" => {
+            "j" | "down" | "Down" => {
                 let target = find_line_down(content, cur, count);
                 (target, true)
             }
-            "k" => {
+            "k" | "up" | "Up" => {
                 let target = find_line_up(content, cur, count);
                 (target, true)
             }
@@ -1042,7 +1092,9 @@ impl ViState {
             _ => return false,
         };
 
-        if !is_visual && let Some(op) = self.pending_op.take() {
+        if is_visual {
+            self.visual_head = Some(target);
+        } else if let Some(op) = self.pending_op.take() {
             self.apply_operator_range(op, cur, target, is_linewise, state);
         } else {
             state.move_to(target);

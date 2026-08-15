@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::item::{Category, Item};
+use crate::link::{find_link_at_offset, format_markdown_link};
 use crate::storage::{Location, Storage};
 use crate::text_input::TextInputState;
 use crate::theme::Theme;
@@ -52,6 +53,9 @@ actions!(
         EditorEscape,
         SaveEditor,
         CloseWindow,
+        EditorCreateSubItem,
+        EditorFollowLink,
+        EditorNavigateBack,
     ]
 );
 
@@ -63,6 +67,10 @@ pub struct ItemEditor {
     pub is_new: bool,
     pub config: Config,
     pub is_torn_off: bool,
+    pub subitem_prompt_open: bool,
+    pub subitem_prompt_text: String,
+    pub context_menu_pos: Option<Point<Pixels>>,
+    pub history_stack: Vec<Uuid>,
 }
 
 impl gpui::EventEmitter<EditorEvent> for ItemEditor {}
@@ -76,14 +84,28 @@ impl ItemEditor {
         config: Config,
         is_torn_off: bool,
     ) -> Self {
+        let (initial_content, initial_cursor) = if is_new && initial.is_empty() {
+            ("# ", 2)
+        } else {
+            (initial, 0)
+        };
+        let mut state = TextInputState::new(initial_content);
+        if initial_cursor > 0 {
+            state.move_to(initial_cursor);
+        }
+
         Self {
-            state: TextInputState::new(initial),
+            state,
             vi_state: ViState::new(),
             focus_handle: cx.focus_handle().tab_stop(true),
             editing_item_id,
             is_new,
             config,
             is_torn_off,
+            subitem_prompt_open: false,
+            subitem_prompt_text: String::new(),
+            context_menu_pos: None,
+            history_stack: Vec::new(),
         }
     }
 
@@ -201,23 +223,43 @@ impl ItemEditor {
         cx.notify();
     }
 
-    pub fn on_up(&mut self, _: &EditorUp, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.move_up();
+    pub fn on_up(&mut self, _: &EditorUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
+            let action = self.vi_state.handle_key("k", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.move_up();
+        }
         cx.notify();
     }
 
-    pub fn on_down(&mut self, _: &EditorDown, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.move_down();
+    pub fn on_down(&mut self, _: &EditorDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
+            let action = self.vi_state.handle_key("j", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.move_down();
+        }
         cx.notify();
     }
 
-    pub fn on_left(&mut self, _: &EditorLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.move_left();
+    pub fn on_left(&mut self, _: &EditorLeft, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
+            let action = self.vi_state.handle_key("h", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.move_left();
+        }
         cx.notify();
     }
 
-    pub fn on_right(&mut self, _: &EditorRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.state.move_right();
+    pub fn on_right(&mut self, _: &EditorRight, window: &mut Window, cx: &mut Context<Self>) {
+        if self.config.vi_mode && self.vi_state.mode != ViMode::Insert {
+            let action = self.vi_state.handle_key("l", &mut self.state);
+            self.process_vi_action(&action, window, cx);
+        } else {
+            self.state.move_right();
+        }
         cx.notify();
     }
 
@@ -305,6 +347,116 @@ impl ItemEditor {
             self.state.insert("");
             cx.notify();
         }
+    }
+
+    pub fn on_create_sub_item(&mut self, _: &EditorCreateSubItem, window: &mut Window, cx: &mut Context<Self>) {
+        let sel_range = self.state.selected_range();
+        if !sel_range.is_empty() {
+            let selected_text = self.state.content()[sel_range.clone()].to_string();
+            let sub_item = Item::new(&selected_text);
+            let location = Location::Active(Category::Today);
+            if Storage::write_item(&self.config.data_dir, &sub_item, &location).is_ok() {
+                let link_text = format_markdown_link(&selected_text, sub_item.id);
+                self.state.replace_range(sel_range, &link_text);
+                self.on_save(&SaveEditor, window, cx);
+            }
+        } else {
+            self.subitem_prompt_open = true;
+            self.subitem_prompt_text.clear();
+        }
+        self.context_menu_pos = None;
+        cx.notify();
+    }
+
+    pub fn confirm_subitem_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let title = self.subitem_prompt_text.trim().to_string();
+        if !title.is_empty() {
+            let sub_item = Item::new(&title);
+            let location = Location::Active(Category::Today);
+            if Storage::write_item(&self.config.data_dir, &sub_item, &location).is_ok() {
+                let link_text = format_markdown_link(&title, sub_item.id);
+                self.state.insert(&link_text);
+                self.on_save(&SaveEditor, window, cx);
+            }
+        }
+        self.subitem_prompt_open = false;
+        self.subitem_prompt_text.clear();
+        cx.notify();
+    }
+
+    pub fn cancel_subitem_prompt(&mut self, cx: &mut Context<Self>) {
+        self.subitem_prompt_open = false;
+        self.subitem_prompt_text.clear();
+        cx.notify();
+    }
+
+    pub fn follow_link_at_offset(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(span) = find_link_at_offset(self.state.content(), offset) {
+            self.on_save(&SaveEditor, window, cx);
+            if let Some(curr_id) = self.editing_item_id {
+                self.history_stack.push(curr_id);
+            }
+            if let Ok(board) = Storage::load_board(&self.config.data_dir)
+                && let Some(target_item) = board.find_item(&span.target_id)
+            {
+                self.state = TextInputState::new(&target_item.body);
+                self.editing_item_id = Some(span.target_id);
+                self.is_new = false;
+                self.context_menu_pos = None;
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn on_follow_link(&mut self, _: &EditorFollowLink, window: &mut Window, cx: &mut Context<Self>) {
+        let cur = self.state.cursor_offset();
+        self.follow_link_at_offset(cur, window, cx);
+    }
+
+    pub fn navigate_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(parent_id) = self.history_stack.pop() {
+            self.on_save(&SaveEditor, window, cx);
+            if let Ok(board) = Storage::load_board(&self.config.data_dir)
+                && let Some(item) = board.find_item(&parent_id)
+            {
+                self.state = TextInputState::new(&item.body);
+                self.editing_item_id = Some(parent_id);
+                self.is_new = false;
+                self.context_menu_pos = None;
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn on_navigate_back(&mut self, _: &EditorNavigateBack, window: &mut Window, cx: &mut Context<Self>) {
+        self.navigate_back(window, cx);
+    }
+
+    pub fn navigate_to_history_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if index < self.history_stack.len() {
+            self.on_save(&SaveEditor, window, cx);
+            let target_id = self.history_stack[index];
+            self.history_stack.truncate(index);
+            if let Ok(board) = Storage::load_board(&self.config.data_dir)
+                && let Some(item) = board.find_item(&target_id)
+            {
+                self.state = TextInputState::new(&item.body);
+                self.editing_item_id = Some(target_id);
+                self.is_new = false;
+                self.context_menu_pos = None;
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        if let Some(id) = self.editing_item_id
+            && let Ok(board) = Storage::load_board(&self.config.data_dir)
+            && let Some(loc) = board.find_item_location(&id)
+        {
+            return matches!(loc, Location::Done);
+        }
+        false
     }
 }
 
@@ -428,7 +580,7 @@ pub struct EditorElement {
 pub struct EditorPrepaintState {
     lines: Vec<gpui::WrappedLine>,
     cursor: Option<gpui::PaintQuad>,
-    selection: Option<gpui::PaintQuad>,
+    selections: Vec<gpui::PaintQuad>,
 }
 
 impl IntoElement for EditorElement {
@@ -475,23 +627,191 @@ impl Element for EditorElement {
         let editor = self.editor.read(cx);
         let content: SharedString = editor.state.content().to_string().into();
         let selected_range = editor.state.selected_range();
-        let cursor_offset = editor.state.cursor_offset();
-        let style = window.text_style();
+        let mut style = window.text_style();
+        style.font_family = editor.config.font_family.clone().into();
+        style.font_size = px(13.).into();
         let font_size = style.font_size.to_pixels(window.rem_size());
-        let line_height = window.line_height();
+        let line_height = px(20.);
         let wrap_width = bounds.size.width;
+
+        let is_visual = editor.config.vi_mode
+            && matches!(editor.vi_state.mode, ViMode::Visual(_));
+        let is_block_cursor = editor.config.vi_mode
+            && matches!(editor.vi_state.mode, ViMode::Normal | ViMode::Command | ViMode::Replace);
+
+        let cursor_offset = if is_visual {
+            editor.vi_state.visual_head.unwrap_or_else(|| editor.state.cursor_offset())
+        } else {
+            editor.state.cursor_offset()
+        };
+
+        let raw_content = editor.state.content();
+        let prefix = &raw_content[..cursor_offset.min(raw_content.len())];
+        let line_idx = prefix.matches('\n').count();
+        let line_start = prefix.rfind('\n').map_or(0, |idx| idx + 1);
+        let col_text = &prefix[line_start..];
+
+        let cursor_y = bounds.top() + (line_idx as f32) * line_height;
+        let cursor_x = if col_text.is_empty() {
+            bounds.left()
+        } else {
+            let col_run = TextRun {
+                len: col_text.len(),
+                font: style.font(),
+                color: style.color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let shaped = window
+                .text_system()
+                .shape_line(col_text.to_string().into(), font_size, &[col_run], None);
+            bounds.left() + shaped.width
+        };
+
+        let (cursor_bounds, cursor_color) = if is_visual {
+            (
+                gpui::Bounds::new(
+                    Point::new(cursor_x, cursor_y + line_height - px(2.)),
+                    gpui::size(px(8.), px(2.)),
+                ),
+                rgb(0x0a84ff),
+            )
+        } else if is_block_cursor {
+            (
+                gpui::Bounds::new(
+                    Point::new(cursor_x, cursor_y),
+                    gpui::size(px(8.), line_height),
+                ),
+                rgba(0x0a84ff99),
+            )
+        } else {
+            (
+                gpui::Bounds::new(
+                    Point::new(cursor_x, cursor_y),
+                    gpui::size(px(2.), line_height),
+                ),
+                rgb(0x0a84ff),
+            )
+        };
+
+        let cursor = Some(gpui::fill(cursor_bounds, cursor_color));
+
+        let mut selections = Vec::new();
+        if !selected_range.is_empty() {
+            let start_off = selected_range.start.min(raw_content.len());
+            let end_off = selected_range.end.min(raw_content.len());
+            let start_prefix = &raw_content[..start_off];
+            let end_prefix = &raw_content[..end_off];
+            let start_line = start_prefix.matches('\n').count();
+            let end_line = end_prefix.matches('\n').count();
+
+            for line_idx in start_line..=end_line {
+                let line_y = bounds.top() + (line_idx as f32) * line_height;
+                let (line_start_x, line_end_x) = if line_idx == start_line && line_idx == end_line {
+                    let col_start = start_prefix.rfind('\n').map_or(0, |idx| idx + 1);
+                    let col_text_start = &start_prefix[col_start..];
+                    let x1 = if col_text_start.is_empty() {
+                        bounds.left()
+                    } else {
+                        let r = TextRun {
+                            len: col_text_start.len(),
+                            font: style.font(),
+                            color: style.color,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        bounds.left()
+                            + window
+                                .text_system()
+                                .shape_line(col_text_start.to_string().into(), font_size, &[r], None)
+                                .width
+                    };
+
+                    let col_end = end_prefix.rfind('\n').map_or(0, |idx| idx + 1);
+                    let col_text_end = &end_prefix[col_end..];
+                    let x2 = if col_text_end.is_empty() {
+                        bounds.left()
+                    } else {
+                        let r = TextRun {
+                            len: col_text_end.len(),
+                            font: style.font(),
+                            color: style.color,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        bounds.left()
+                            + window
+                                .text_system()
+                                .shape_line(col_text_end.to_string().into(), font_size, &[r], None)
+                                .width
+                    };
+                    (x1, x2)
+                } else if line_idx == start_line {
+                    let col_start = start_prefix.rfind('\n').map_or(0, |idx| idx + 1);
+                    let col_text_start = &start_prefix[col_start..];
+                    let x1 = if col_text_start.is_empty() {
+                        bounds.left()
+                    } else {
+                        let r = TextRun {
+                            len: col_text_start.len(),
+                            font: style.font(),
+                            color: style.color,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        bounds.left()
+                            + window
+                                .text_system()
+                                .shape_line(col_text_start.to_string().into(), font_size, &[r], None)
+                                .width
+                    };
+                    (x1, bounds.left() + bounds.size.width)
+                } else if line_idx == end_line {
+                    let col_end = end_prefix.rfind('\n').map_or(0, |idx| idx + 1);
+                    let col_text_end = &end_prefix[col_end..];
+                    let x2 = if col_text_end.is_empty() {
+                        bounds.left()
+                    } else {
+                        let r = TextRun {
+                            len: col_text_end.len(),
+                            font: style.font(),
+                            color: style.color,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        bounds.left()
+                            + window
+                                .text_system()
+                                .shape_line(col_text_end.to_string().into(), font_size, &[r], None)
+                                .width
+                    };
+                    (bounds.left(), x2)
+                } else {
+                    (bounds.left(), bounds.left() + bounds.size.width)
+                };
+
+                if line_end_x > line_start_x {
+                    selections.push(gpui::fill(
+                        gpui::Bounds::from_corners(
+                            Point::new(line_start_x, line_y),
+                            Point::new(line_end_x, line_y + line_height),
+                        ),
+                        rgba(0x0a84ff40),
+                    ));
+                }
+            }
+        }
 
         if content.is_empty() {
             return EditorPrepaintState {
                 lines: Vec::new(),
-                cursor: Some(gpui::fill(
-                    gpui::Bounds::new(
-                        Point::new(bounds.left(), bounds.top()),
-                        gpui::size(px(2.), line_height),
-                    ),
-                    gpui::blue(),
-                )),
-                selection: None,
+                cursor,
+                selections,
             };
         }
 
@@ -513,54 +833,15 @@ impl Element for EditorElement {
         ) else {
             return EditorPrepaintState {
                 lines: Vec::new(),
-                cursor: None,
-                selection: None,
+                cursor,
+                selections,
             };
-        };
-
-        let cursor = if let Some(first_line) = lines.first() {
-            let cursor_pos = first_line.position_for_index(cursor_offset, line_height);
-            cursor_pos.map(|p| {
-                gpui::fill(
-                    gpui::Bounds::new(
-                        Point::new(bounds.left() + p.x, bounds.top() + p.y),
-                        gpui::size(px(2.), line_height),
-                    ),
-                    gpui::blue(),
-                )
-            })
-        } else {
-            None
-        };
-
-        let selection = if !selected_range.is_empty() {
-            if let Some(first_line) = lines.first() {
-                let start_x = first_line
-                    .position_for_index(selected_range.start, line_height)
-                    .map(|p| p.x)
-                    .unwrap_or(px(0.));
-                let end_x = first_line
-                    .position_for_index(selected_range.end, line_height)
-                    .map(|p| p.x)
-                    .unwrap_or(bounds.size.width);
-                Some(gpui::fill(
-                    gpui::Bounds::from_corners(
-                        Point::new(bounds.left() + start_x, bounds.top()),
-                        Point::new(bounds.left() + end_x, bounds.top() + line_height),
-                    ),
-                    rgba(0x3311ff30),
-                ))
-            } else {
-                None
-            }
-        } else {
-            None
         };
 
         EditorPrepaintState {
             lines: lines.into_iter().collect(),
             cursor,
-            selection,
+            selections,
         }
     }
 
@@ -582,11 +863,11 @@ impl Element for EditorElement {
             cx,
         );
 
-        if let Some(selection) = prepaint.selection.take() {
+        for selection in prepaint.selections.drain(..) {
             window.paint_quad(selection);
         }
 
-        let line_height = window.line_height();
+        let line_height = px(20.);
         let mut y = bounds.top();
         for line in &prepaint.lines {
             line.paint(
@@ -633,7 +914,9 @@ impl Render for ItemEditor {
                 .bg(theme.bg_column)
                 .border_r_1()
                 .border_color(theme.border)
-                .text_sm()
+                .font_family(self.config.font_family.clone())
+                .text_size(px(13.))
+                .line_height(px(20.))
                 .text_color(theme.text_secondary);
 
             for i in 1..=line_count {
@@ -671,6 +954,21 @@ impl Render for ItemEditor {
             .cursor(gpui::CursorStyle::IBeam)
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 let key = event.keystroke.key.as_str();
+                if this.subitem_prompt_open {
+                    if key == "enter" || key == "Enter" || key == "\n" || key == "\r" {
+                        this.confirm_subitem_prompt(window, cx);
+                    } else if key == "escape" || key == "Esc" || key == "Escape" || key == "\x1b" {
+                        this.cancel_subitem_prompt(cx);
+                    } else if key == "backspace" || key == "Backspace" || key == "\x08" || key == "\x7f" {
+                        this.subitem_prompt_text.pop();
+                        cx.notify();
+                    } else if !event.keystroke.modifiers.control && !event.keystroke.modifiers.alt && key.chars().count() == 1 {
+                        this.subitem_prompt_text.push_str(key);
+                        cx.notify();
+                    }
+                    return;
+                }
+
                 if (key == "escape" || key == "Esc" || key == "Escape" || key == "\x1b")
                     && this.config.vi_mode
                 {
@@ -699,18 +997,110 @@ impl Render for ItemEditor {
             .on_action(cx.listener(Self::on_cut))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_close))
+            .on_action(cx.listener(Self::on_create_sub_item))
+            .on_action(cx.listener(Self::on_follow_link))
+            .on_action(cx.listener(Self::on_navigate_back))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+                    this.context_menu_pos = Some(event.position);
+                    cx.notify();
+                }),
+            )
+            // Top breadcrumb & done badge bar
+            .children(if !self.history_stack.is_empty() || self.is_done() {
+                let mut row = div()
+                    .flex()
+                    .flex_row()
+                    .justify_between()
+                    .items_center()
+                    .px(px(12.))
+                    .py(px(6.))
+                    .bg(theme.bg_column)
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .text_sm();
+
+                let mut crumbs = div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(6.));
+
+                if !self.history_stack.is_empty() {
+                    if let Ok(board) = Storage::load_board(&self.config.data_dir) {
+                        for (idx, &item_id) in self.history_stack.iter().enumerate() {
+                            let title = board
+                                .find_item(&item_id)
+                                .map(Item::title)
+                                .unwrap_or_else(|| "Parent Item".to_string());
+                            crumbs = crumbs
+                                .child(
+                                    div()
+                                        .cursor_pointer()
+                                        .text_color(theme.accent)
+                                        .child(title)
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _, window, cx| {
+                                                this.navigate_to_history_index(idx, window, cx);
+                                            }),
+                                        ),
+                                )
+                                .child(div().text_color(theme.text_secondary).child(">"));
+                        }
+                    }
+                    crumbs = crumbs.child(
+                        div()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(Item::extract_title(self.state.content())),
+                    );
+                }
+
+                row = row.child(crumbs);
+
+                if self.is_done() {
+                    row = row.child(
+                        div()
+                            .px(px(8.))
+                            .py(px(2.))
+                            .rounded(px(4.))
+                            .bg(rgb(0x2e7d32))
+                            .text_color(rgb(0xffffff))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child("✅ Done"),
+                    );
+                }
+
+                Some(row)
+            } else {
+                None
+            })
             // Editor main area (gutter + text)
             .child(
                 div()
                     .flex_1()
                     .flex()
                     .flex_row()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                            this.context_menu_pos = None;
+                            if event.modifiers.control || event.modifiers.platform {
+                                this.follow_link_at_offset(this.state.cursor_offset(), window, cx);
+                            }
+                        }),
+                    )
                     .children(gutter)
                     .child(
                         div()
                             .flex_1()
                             .p(px(16.))
-                            .text_sm()
+                            .font_family(self.config.font_family.clone())
+                            .text_size(px(13.))
+                            .line_height(px(20.))
                             .text_color(theme.text_primary)
                             .child(EditorElement {
                                 editor: cx.entity(),
@@ -842,6 +1232,237 @@ impl Render for ItemEditor {
                                 .child(crate::i18n::t("editor.cancel", self.config.language)),
                         ),
                 )
+            })
+            // Sub-item creation prompt dialog modal
+            .children(if self.subitem_prompt_open {
+                let prompt_text = self.subitem_prompt_text.clone();
+                Some(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .bg(rgba(0x00000066))
+                        .flex()
+                        .justify_center()
+                        .items_center()
+                        .child(
+                            div()
+                                .w(px(360.))
+                                .p(px(16.))
+                                .rounded(px(8.))
+                                .bg(theme.bg_surface)
+                                .border_1()
+                                .border_color(theme.border)
+                                .shadow_lg()
+                                .flex()
+                                .flex_col()
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(theme.text_primary)
+                                        .child("Create Sub-item"),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.text_secondary)
+                                        .child("Enter title or short phrase for the new sub-item:"),
+                                )
+                                .child(
+                                    div()
+                                        .w_full()
+                                        .p(px(8.))
+                                        .rounded(px(4.))
+                                        .bg(theme.bg_column)
+                                        .border_1()
+                                        .border_color(theme.selection)
+                                        .text_sm()
+                                        .text_color(theme.text_primary)
+                                        .child(if prompt_text.is_empty() {
+                                            "Type sub-item title...".to_string()
+                                        } else {
+                                            prompt_text
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .justify_end()
+                                        .gap(px(8.))
+                                        .child(
+                                            div()
+                                                .px(px(12.))
+                                                .py(px(6.))
+                                                .rounded(px(4.))
+                                                .bg(theme.accent)
+                                                .text_color(rgb(0xffffff))
+                                                .text_xs()
+                                                .cursor_pointer()
+                                                .on_mouse_down(
+                                                    MouseButton::Left,
+                                                    cx.listener(|this, _, window, cx| {
+                                                        this.confirm_subitem_prompt(window, cx);
+                                                    }),
+                                                )
+                                                .child("Create Link"),
+                                        )
+                                        .child(
+                                            div()
+                                                .px(px(12.))
+                                                .py(px(6.))
+                                                .rounded(px(4.))
+                                                .bg(theme.bg_surface)
+                                                .border_1()
+                                                .border_color(theme.border)
+                                                .text_color(theme.text_primary)
+                                                .text_xs()
+                                                .cursor_pointer()
+                                                .on_mouse_down(
+                                                    MouseButton::Left,
+                                                    cx.listener(|this, _, _, cx| {
+                                                        this.cancel_subitem_prompt(cx);
+                                                    }),
+                                                )
+                                                .child("Cancel"),
+                                        ),
+                                ),
+                        ),
+                )
+            } else {
+                None
+            })
+            // Context menu overlay
+            .children(if let Some(pos) = self.context_menu_pos {
+                let has_selection = !self.state.selected_range().is_empty();
+                let cursor_on_link = find_link_at_offset(self.state.content(), self.state.cursor_offset()).is_some();
+                Some(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.context_menu_pos = None;
+                                        cx.notify();
+                                    }),
+                                )
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.context_menu_pos = None;
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .left(pos.x)
+                                .top(pos.y)
+                                .w(px(240.))
+                                .bg(theme.bg_surface)
+                                .border_1()
+                                .border_color(theme.border)
+                                .rounded(px(6.))
+                                .shadow_lg()
+                                .p(px(4.))
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .px(px(8.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .text_sm()
+                                        .text_color(theme.text_primary)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(theme.bg_column))
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_create_sub_item(&EditorCreateSubItem, window, cx);
+                                            }),
+                                        )
+                                        .child(if has_selection {
+                                            "Create Sub-item from Selection (Cmd-K)"
+                                        } else {
+                                            "Create Sub-item... (Cmd-K)"
+                                        }),
+                                )
+                                .children(if cursor_on_link {
+                                    Some(
+                                        div()
+                                            .px(px(8.))
+                                            .py(px(6.))
+                                            .rounded(px(4.))
+                                            .text_sm()
+                                            .text_color(theme.text_primary)
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(theme.bg_column))
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.on_follow_link(&EditorFollowLink, window, cx);
+                                                }),
+                                            )
+                                            .child("Follow Link (Cmd-Enter)"),
+                                    )
+                                } else {
+                                    None
+                                })
+                                .child(
+                                    div()
+                                        .px(px(8.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .text_sm()
+                                        .text_color(theme.text_primary)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(theme.bg_column))
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_copy(&EditorCopy, window, cx);
+                                                this.context_menu_pos = None;
+                                            }),
+                                        )
+                                        .child("Copy"),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(8.))
+                                        .py(px(6.))
+                                        .rounded(px(4.))
+                                        .text_sm()
+                                        .text_color(theme.text_primary)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(theme.bg_column))
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _, window, cx| {
+                                                this.on_paste(&EditorPaste, window, cx);
+                                                this.context_menu_pos = None;
+                                            }),
+                                        )
+                                        .child("Paste"),
+                                ),
+                        ),
+                )
+            } else {
+                None
             })
     }
 }

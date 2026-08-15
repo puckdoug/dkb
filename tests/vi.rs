@@ -426,26 +426,83 @@ fn test_vi_visual_character_and_line_modes() {
     let mut vi = ViState::new();
 
     // Visual Character mode
+    state.move_to(0);
     vi.handle_key("v", &mut state);
     assert_eq!(vi.mode, ViMode::Visual(VisualKind::Character));
-    vi.handle_key("w", &mut state);
-    assert_eq!(state.selected_range(), 0..6);
+    assert_eq!(state.selected_range(), 0..1);
+
+    vi.handle_key("e", &mut state);
+    assert_eq!(state.selected_range(), 0..5);
 
     vi.handle_key("d", &mut state);
     assert_eq!(vi.mode, ViMode::Normal);
-    assert_eq!(state.content(), "line\nsecond line\nthird line");
+    assert_eq!(state.content(), " line\nsecond line\nthird line");
 
     // Visual Line mode
     state.move_to(0);
     vi.handle_key("V", &mut state);
     assert_eq!(vi.mode, ViMode::Visual(VisualKind::Line));
     vi.handle_key("j", &mut state);
-    // Selection should cover first two lines
-    assert_eq!(state.selected_range(), 0..17);
+    // Selection should cover first two lines (" line\n" + "second line\n" = 6 + 12 = 18)
+    assert_eq!(state.selected_range(), 0..18);
 
     vi.handle_key("d", &mut state);
     assert_eq!(vi.mode, ViMode::Normal);
     assert_eq!(state.content(), "third line");
+}
+
+#[test]
+fn test_vi_x_at_end_of_line_deletes_right_to_left() {
+    let mut state = TextInputState::new("hello");
+    let mut vi = ViState::new();
+
+    // Move to end of "hello" (line end index 5)
+    vi.handle_key("$", &mut state);
+    assert_eq!(state.cursor_offset(), 5);
+
+    // x deletes 'o', cursor moves to 'l' (index 3)
+    vi.handle_key("x", &mut state);
+    assert_eq!(state.content(), "hell");
+    assert_eq!(state.cursor_offset(), 3);
+
+    // x deletes 'l', cursor moves to 'l' (index 2)
+    vi.handle_key("x", &mut state);
+    assert_eq!(state.content(), "hel");
+    assert_eq!(state.cursor_offset(), 2);
+
+    // x deletes 'l', cursor moves to 'e' (index 1)
+    vi.handle_key("x", &mut state);
+    assert_eq!(state.content(), "he");
+    assert_eq!(state.cursor_offset(), 1);
+
+    // x deletes 'e', cursor moves to 'h' (index 0)
+    vi.handle_key("x", &mut state);
+    assert_eq!(state.content(), "h");
+    assert_eq!(state.cursor_offset(), 0);
+
+    // x deletes 'h', line becomes empty
+    vi.handle_key("x", &mut state);
+    assert_eq!(state.content(), "");
+    assert_eq!(state.cursor_offset(), 0);
+}
+
+#[test]
+fn test_vi_space_moves_forward() {
+    let mut state = TextInputState::new("hello world");
+    let mut vi = ViState::new();
+
+    state.move_to(0);
+    vi.handle_key(" ", &mut state);
+    assert_eq!(state.cursor_offset(), 1);
+
+    vi.handle_key("space", &mut state);
+    assert_eq!(state.cursor_offset(), 2);
+
+    // In Visual mode, space extends selection forward
+    vi.handle_key("v", &mut state);
+    assert_eq!(vi.mode, ViMode::Visual(VisualKind::Character));
+    vi.handle_key(" ", &mut state);
+    assert_eq!(state.selected_range(), 2..4);
 }
 
 #[test]

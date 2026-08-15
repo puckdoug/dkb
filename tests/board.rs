@@ -1,6 +1,6 @@
 #![allow(clippy::pedantic)]
 
-use dkb::board::Board;
+use dkb::board::{Board, BoardState};
 use dkb::item::{Category, Item};
 use dkb::storage::{Location, Storage};
 use tempfile::TempDir;
@@ -147,5 +147,24 @@ fn test_board_absolute_order_persistence() {
     let loaded_board = Storage::load_board(temp.path()).unwrap();
     let today_ids: Vec<_> = loaded_board.active.today.iter().map(|i| i.id).collect();
     assert_eq!(today_ids, vec![item3.id, item1.id, item2.id]);
+}
+
+#[test]
+fn test_board_state_serialization_with_last_active_date() {
+    let state = BoardState {
+        version: 1,
+        order: std::collections::HashMap::new(),
+        last_active_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap()),
+    };
+    let json = serde_json::to_string(&state).unwrap();
+    assert!(json.contains("2026-08-15"));
+
+    let deserialized: BoardState = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.last_active_date, state.last_active_date);
+
+    // Backwards compatibility: JSON without last_active_date
+    let old_json = r#"{"version":1,"order":{}}"#;
+    let from_old: BoardState = serde_json::from_str(old_json).unwrap();
+    assert_eq!(from_old.last_active_date, None);
 }
 

@@ -1,43 +1,98 @@
 use std::collections::HashSet;
+use std::ops::Range;
 use std::path::Path;
 use uuid::Uuid;
 
 use crate::item::Item;
 use crate::storage::Location;
 
-pub fn extract_links(body: &str) -> Vec<Uuid> {
-    let mut links = Vec::new();
-    let chars: Vec<char> = body.chars().collect();
-    let len = chars.len();
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkSpan {
+    pub range: Range<usize>,
+    pub target_id: Uuid,
+    pub text: String,
+}
+
+#[must_use]
+pub fn format_markdown_link(text: &str, id: Uuid) -> String {
+    format!("[{text}]({id}.md)")
+}
+
+#[must_use]
+pub fn extract_link_spans(content: &str) -> Vec<LinkSpan> {
+    let mut spans = Vec::new();
+    let len = content.len();
     let mut i = 0;
 
     while i < len {
-        // Check for markdown link: `](` + uuid + (`.md` optionally) + `)`
-        if chars[i] == ']' && i + 1 < len && chars[i + 1] == '(' {
-            let start = i + 2;
-            if let Some(close_paren) = body[start..].find(')') {
-                let target = &body[start..start + close_paren].trim();
-                let target_cleaned = target.strip_suffix(".md").unwrap_or(target);
+        if content[i..].starts_with("[[") {
+            if let Some(close_idx) = content[i + 2..].find("]]") {
+                let close_pos = i + 2 + close_idx;
+                let end_pos = close_pos + 2;
+                let inner = &content[i + 2..close_pos];
+                let (target_part, text_part) = match inner.split_once('|') {
+                    Some((target, text)) => (target.trim(), text.trim()),
+                    None => (inner.trim(), inner.trim()),
+                };
+                let target_cleaned = target_part.strip_suffix(".md").unwrap_or(target_part);
                 if let Ok(id) = Uuid::parse_str(target_cleaned) {
-                    links.push(id);
+                    spans.push(LinkSpan {
+                        range: i..end_pos,
+                        target_id: id,
+                        text: text_part.to_string(),
+                    });
+                    i = end_pos;
+                    continue;
+                }
+            }
+        } else if content[i..].starts_with('[')
+            && let Some(close_bracket_idx) = content[i + 1..].find(']')
+        {
+            let close_bracket_pos = i + 1 + close_bracket_idx;
+            if content[close_bracket_pos..].starts_with("](") {
+                let open_paren_pos = close_bracket_pos + 1;
+                if let Some(close_paren_idx) = content[open_paren_pos + 1..].find(')') {
+                    let close_paren_pos = open_paren_pos + 1 + close_paren_idx;
+                    let end_pos = close_paren_pos + 1;
+                    let text = &content[i + 1..close_bracket_pos];
+                    let url = content[open_paren_pos + 1..close_paren_pos].trim();
+                    let target_cleaned = url.strip_suffix(".md").unwrap_or(url);
+                    if let Ok(id) = Uuid::parse_str(target_cleaned) {
+                        spans.push(LinkSpan {
+                            range: i..end_pos,
+                            target_id: id,
+                            text: text.to_string(),
+                        });
+                        i = end_pos;
+                        continue;
+                    }
                 }
             }
         }
-        // Check for wikilink: `[[` + uuid + (`.md` optionally) + `]]`
-        else if chars[i] == '[' && i + 1 < len && chars[i + 1] == '[' {
-            let start = i + 2;
-            if let Some(close_wiki) = body[start..].find("]]") {
-                let target = &body[start..start + close_wiki].trim();
-                let target_cleaned = target.strip_suffix(".md").unwrap_or(target);
-                if let Ok(id) = Uuid::parse_str(target_cleaned) {
-                    links.push(id);
-                }
-            }
+
+        if let Some(ch) = content[i..].chars().next() {
+            i += ch.len_utf8();
+        } else {
+            break;
         }
-        i += 1;
     }
 
-    links
+    spans
+}
+
+#[must_use]
+pub fn find_link_at_offset(content: &str, offset: usize) -> Option<LinkSpan> {
+    extract_link_spans(content)
+        .into_iter()
+        .find(|span| offset >= span.range.start && offset <= span.range.end)
+}
+
+#[must_use]
+pub fn extract_links(body: &str) -> Vec<Uuid> {
+    extract_link_spans(body)
+        .into_iter()
+        .map(|span| span.target_id)
+        .collect()
 }
 
 fn find_and_read_item(data_dir: &Path, id: &Uuid) -> Option<Item> {

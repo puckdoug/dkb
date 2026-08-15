@@ -1,9 +1,9 @@
 #![allow(clippy::pedantic)]
 
 use dkb::app::{
-    ContextMenuState, DeleteItem, KanbanView, MoveItemDown, MoveItemUp, NavDown, NavLeft, NavRight,
-    NavUp, NewItem, NextColumn, OpenInMarkdownViewer, OpenNewMainWindow, OpenSelectedForEdit,
-    OpenSettings, PrevColumn, Screen, ToggleDone,
+    CancelEditor, ContextMenuState, DeleteItem, KanbanView, MoveItemDown, MoveItemUp, NavDown,
+    NavLeft, NavRight, NavUp, NewItem, NextColumn, OpenInMarkdownViewer, OpenNewMainWindow,
+    OpenSelectedForEdit, OpenSettings, PrevColumn, Screen, ToggleDone,
 };
 use dkb::config::{Config, ThemeMode};
 use dkb::editor::{CloseWindow, EditorEvent, SaveEditor};
@@ -47,6 +47,7 @@ fn test_theme_mode_settings_applied() {
         theme_mode: ThemeMode::Dark,
         language: Language::Auto,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     let theme = Theme::resolve(config.theme_mode, false);
     // Dark theme should have dark window background
@@ -63,6 +64,11 @@ fn test_key_bindings_context_isolation() {
     assert!(bindings.len() > 20);
     assert!(bindings.iter().any(|b| b.action().name() == "dkb::OpenNewMainWindow"));
     assert!(bindings.iter().any(|b| b.action().name() == "dkb::OpenInMarkdownViewer"));
+    let delete_bindings: Vec<_> = bindings.iter().filter(|b| b.action().name() == "dkb::DeleteItem").collect();
+    assert_eq!(delete_bindings.len(), 4); // delete, backspace, cmd-backspace, cmd-delete
+    let debug_str = format!("{:?}", delete_bindings);
+    assert!(debug_str.contains("cmd-backspace") || debug_str.contains("backspace"));
+    assert!(debug_str.contains("cmd-delete") || debug_str.contains("delete"));
 }
 
 #[gpui::test]
@@ -124,6 +130,7 @@ fn test_editor_vi_ex_save_and_close_integration(cx: &mut gpui::TestAppContext) {
         theme_mode: ThemeMode::Dark,
         language: Language::Auto,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
 
     let window = cx.add_window(|_window, cx| {
@@ -224,6 +231,7 @@ fn test_settings_language_switch(cx: &mut gpui::TestAppContext) {
         theme_mode: ThemeMode::System,
         language: Language::EnUs,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     config.save_to(&config_file).unwrap();
 
@@ -286,6 +294,7 @@ fn test_settings_markdown_viewer_preference_switch(cx: &mut gpui::TestAppContext
         theme_mode: ThemeMode::System,
         language: Language::EnUs,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     config.save_to(&config_file).unwrap();
 
@@ -325,6 +334,50 @@ fn test_settings_markdown_viewer_preference_switch(cx: &mut gpui::TestAppContext
 }
 
 #[gpui::test]
+fn test_settings_font_family_switch(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config_file = dir.path().join("config.toml");
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    config.save_to(&config_file).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view
+    });
+
+    window
+        .update(cx, |view, _window, cx| {
+            assert_eq!(view.config.font_family, "Menlo");
+            assert!(!view.font_dropdown_open);
+
+            // Toggle font dropdown
+            view.font_dropdown_open = true;
+            cx.notify();
+            assert!(view.font_dropdown_open);
+
+            // Change font to JetBrains Mono
+            view.config.font_family = "JetBrains Mono".to_string();
+            view.font_dropdown_open = false;
+            view.config.save_to(&config_file).unwrap();
+            cx.notify();
+        })
+        .unwrap();
+
+    // Verify config persisted and reloaded
+    let reloaded = Config::load_from(&config_file).unwrap();
+    assert_eq!(reloaded.font_family, "JetBrains Mono");
+}
+
+#[gpui::test]
 fn test_open_new_main_window_action(cx: &mut gpui::TestAppContext) {
     let window = cx.add_window(|_window, cx| KanbanView::new(cx));
     window
@@ -346,6 +399,7 @@ fn test_open_in_markdown_viewer_action_runs_safely(cx: &mut gpui::TestAppContext
         theme_mode: ThemeMode::System,
         language: Language::Auto,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     Storage::init(&config.data_dir).unwrap();
     let item = Item::new("Viewer Test Item");
@@ -378,6 +432,7 @@ fn test_right_click_context_menu_on_card(cx: &mut gpui::TestAppContext) {
         theme_mode: ThemeMode::Dark,
         language: Language::Auto,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     Storage::init(&config.data_dir).unwrap();
     let item = Item::new("Context Menu Item\nDetails");
@@ -473,6 +528,7 @@ fn test_move_item_up_and_down_shortcuts(cx: &mut gpui::TestAppContext) {
         theme_mode: ThemeMode::System,
         language: Language::EnUs,
         markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
     };
     Storage::init(&config.data_dir).unwrap();
 
@@ -515,6 +571,258 @@ fn test_move_item_up_and_down_shortcuts(cx: &mut gpui::TestAppContext) {
             view.on_move_item_down(&MoveItemDown, window, cx);
             let today_ids: Vec<_> = view.board.active.today.iter().map(|i| i.id).collect();
             assert_eq!(today_ids, vec![item1.id, item3.id, item2.id]);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_new_item_initial_header_prefix(cx: &mut gpui::TestAppContext) {
+    let window = cx.add_window(|_window, cx| KanbanView::new(cx));
+
+    window
+        .update(cx, |view, window, cx| {
+            view.on_new_item(&NewItem, window, cx);
+            assert!(view.editing.is_some());
+            let editing = view.editing.as_ref().unwrap();
+            let editor = editing.editor.read(cx);
+            assert_eq!(editor.content(), "# ");
+            assert_eq!(editor.state.cursor_offset(), 2);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_create_subitem_with_selection(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nSome details here");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, _window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, _cx| {
+                // Select "Some details" (offset 12..24)
+                editor.state.move_to(12);
+                editor.state.select_to(24);
+                assert_eq!(&editor.content()[editor.state.selected_range()], "Some details");
+            });
+        })
+        .unwrap();
+
+    window
+        .update(cx, |view, window, cx| {
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.content().contains("[Some details]("));
+                assert!(editor.content().contains(".md)"));
+            });
+        })
+        .unwrap();
+
+    // Verify sub-item file was created
+    let board = Storage::load_board(dir.path()).unwrap();
+    let sub_item = board.active.today.iter().find(|i| i.title() == "Some details");
+    assert!(sub_item.is_some());
+}
+
+#[gpui::test]
+fn test_editor_create_subitem_prompt_modal(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nBody text");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                editor.state.move_to(editor.content().len());
+                // No selection -> triggers prompt
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.subitem_prompt_open);
+
+                editor.subitem_prompt_text = "Prompted Sub Item".to_string();
+                editor.confirm_subitem_prompt(window, cx);
+                assert!(!editor.subitem_prompt_open);
+                assert!(editor.content().contains("[Prompted Sub Item]("));
+            });
+        })
+        .unwrap();
+
+    // Verify file created
+    let board = Storage::load_board(dir.path()).unwrap();
+    let sub_item = board.active.today.iter().find(|i| i.title() == "Prompted Sub Item");
+    assert!(sub_item.is_some());
+}
+
+#[gpui::test]
+fn test_editor_follow_link_and_breadcrumb_navigation(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let child_item = Item::new("Child Subtask\nChild content");
+    Storage::write_item(&config.data_dir, &child_item, &Location::Active(Category::Today)).unwrap();
+
+    let parent_body = format!("Parent Item\nLink to [{}]({}.md) child task", child_item.title(), child_item.id);
+    let parent_item = Item {
+        id: uuid::Uuid::new_v4(),
+        body: parent_body,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        completed_at: None,
+    };
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+
+            // Follow link: place cursor inside link text (e.g. offset 25)
+            editing.editor.update(cx, |editor, cx| {
+                editor.state.move_to(25);
+                editor.on_follow_link(&dkb::editor::EditorFollowLink, window, cx);
+                assert_eq!(editor.editing_item_id, Some(child_item.id));
+                assert_eq!(editor.content(), "Child Subtask\nChild content");
+                assert_eq!(editor.history_stack, vec![parent_item.id]);
+            });
+
+            // Navigate back
+            editing.editor.update(cx, |editor, cx| {
+                editor.on_navigate_back(&dkb::editor::EditorNavigateBack, window, cx);
+                assert_eq!(editor.editing_item_id, Some(parent_item.id));
+                assert!(editor.history_stack.is_empty());
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_done_badge(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let done_item = Item::new("Finished Task");
+    Storage::write_item(&config.data_dir, &done_item, &Location::Done).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, _window, cx| {
+            view.open_editor_for_item(done_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            let editor = editing.editor.read(cx);
+            assert!(editor.is_done());
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_multiline_blank_line_navigation(cx: &mut gpui::TestAppContext) {
+    let window = cx.add_window(|_window, cx| KanbanView::new(cx));
+
+    window
+        .update(cx, |view, window, cx| {
+            view.on_new_item(&NewItem, window, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                // Set multiline content with a blank line in the middle
+                editor.state = dkb::text_input::TextInputState::new("Line 1\n\nLine 3");
+                // Position on blank line (index 7)
+                editor.state.move_to(7);
+                assert_eq!(editor.state.cursor_offset(), 7);
+                let content = editor.content();
+                let prefix = &content[..7];
+                let line_idx = prefix.matches('\n').count();
+                assert_eq!(line_idx, 1); // exactly on line 1 (blank line)
+                cx.notify();
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_focus_returns_to_kanban_view_on_editor_dismiss(cx: &mut gpui::TestAppContext) {
+    let window = cx.add_window(|_window, cx| KanbanView::new(cx));
+
+    window
+        .update(cx, |view, window, cx| {
+            // Open editor
+            view.on_new_item(&NewItem, window, cx);
+            assert!(view.editing.is_some());
+
+            // Cancel editor
+            view.on_cancel_editor(&CancelEditor, window, cx);
+            assert!(view.editing.is_none());
+            assert!(view.focus_handle.is_focused(window));
         })
         .unwrap();
 }

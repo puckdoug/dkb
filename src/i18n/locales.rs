@@ -99,6 +99,7 @@ fn lookup_en(key: &str) -> Option<&'static str> {
         "settings.theme_system" => "System",
         "settings.vi_mode" => "Enable vi-mode",
         "settings.line_numbers" => "Line Numbers",
+        "settings.font_family" => "Font Family",
         "settings.language" => "Language",
         "settings.markdown_viewer" => "Markdown Viewer",
         "settings.storage_dir" => "Storage Directory",
