@@ -92,6 +92,12 @@ impl Config {
         let mut config: Config = toml::from_str(&content).unwrap_or_default();
         
         config.data_dir = Self::expand_tilde(&config.data_dir.to_string_lossy());
+
+        if config.data_dir == Self::config_dir() {
+            config.data_dir = Self::default_data_dir();
+            let _ = config.save_to(config_path);
+        }
+
         if let ViewerPreference::Custom(ref path) = config.markdown_viewer {
             config.markdown_viewer = ViewerPreference::Custom(Self::expand_tilde(&path.to_string_lossy()));
         }
