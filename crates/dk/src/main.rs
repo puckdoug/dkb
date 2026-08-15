@@ -62,18 +62,7 @@ fn main() {
                 commands::move_cmd::run_move(&data_dir, &rest[0], &rest[1])
             }
         }
-        "delete" | "rm" => {
-            let mut force = false;
-            let mut filtered: Vec<String> = Vec::new();
-            for a in rest {
-                if a == "-f" || a == "--force" {
-                    force = true;
-                } else {
-                    filtered.push(a.clone());
-                }
-            }
-            commands::delete::run_delete(&data_dir, &filtered, force)
-        }
+        "delete" | "rm" => commands::delete::run_delete(&data_dir, rest),
         _ => unreachable!(),
     };
 
@@ -96,7 +85,7 @@ fn print_usage() {
     eprintln!("  show (s)        Display an item via $PAGER or stdout");
     eprintln!("  path            Print the full path to an item");
     eprintln!("  move (mv)       Move an item to a different category");
-    eprintln!("  delete (rm)    Delete items (with confirmation)");
+    eprintln!("  delete (rm)    Delete items");
     eprintln!("  help            Show this help, or help for a command");
     eprintln!();
     eprintln!("run 'dk help <command>' for details on a specific command");
@@ -202,18 +191,16 @@ fn print_move_help() {
 }
 
 fn print_delete_help() {
-    println!("dk delete [selection...] [-f]    (alias: dk rm)");
+    println!("dk delete [selection...]    (alias: dk rm)");
     println!();
     println!("Delete one or more items. With no arguments, deletes the");
-    println!("current item. Prompts for confirmation unless -f or");
-    println!("--force is given. Uses the same selection mechanism as");
-    println!("edit.");
+    println!("current item. Uses the same selection mechanism as edit.");
     println!();
     println!("examples:");
-    println!("  dk rm                   # delete current item (prompts)");
-    println!("  dk rm 3                 # delete index 3 (prompts)");
-    println!("  dk rm backlog/5         # delete 6th backlog item (prompts)");
-    println!("  dk rm 3 5 9 -f          # delete three items without prompting");
+    println!("  dk rm                   # delete current item");
+    println!("  dk rm 3                 # delete index 3");
+    println!("  dk rm backlog/5         # delete 6th backlog item");
+    println!("  dk rm 3 5 9             # delete three items");
 }
 
 fn print_help_help() {

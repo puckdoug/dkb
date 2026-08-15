@@ -467,7 +467,7 @@ The CLI keeps a small state file, `cli_state.json`, in the data directory. This 
 | `dk show [selection]` | `dk s` | Display an item via $PAGER or stdout. |
 | `dk path [selection]` | | Print the full path to an item's file. |
 | `dk move <selection> <category>` | `dk mv` | Move an item to a different column. |
-| `dk delete [selection...] [-f]` | `dk rm` | Delete items, with confirmation. |
+| `dk delete [selection...]` | `dk rm` | Delete items. |
 
 ### Category aliases
 
@@ -589,13 +589,13 @@ dk mv 3 b              # move item 3 to Backlog
 
 ### `dk delete` / `dk rm`
 
-Deletes one or more items. With no arguments it deletes the current item. By default each deletion prompts for confirmation (`y`/`Y` to proceed, anything else aborts). Pass `-f` or `--force` to skip the prompt. Deleting the current item clears the current-item marker.
+Deletes one or more items. With no arguments it deletes the current item. Deleting the current item clears the current-item marker.
 
 ```
-dk rm                  # delete current item (with prompt)
-dk rm 3                # delete index 3 (with prompt)
+dk rm                  # delete current item
+dk rm 3                # delete index 3
 dk rm backlog/5        # delete the sixth Backlog item
-dk rm 3 5 9 -f         # delete three items without prompting
+dk rm 3 5 9            # delete three items
 ```
 
 ### CLI state file
