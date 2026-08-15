@@ -61,7 +61,7 @@ impl Default for Config {
 impl Config {
     pub const MONOSPACE_FONTS: &[&str] = MONOSPACE_FONTS;
 
-    pub fn default_data_dir() -> PathBuf {
+    pub fn config_dir() -> PathBuf {
         if let Some(home) = std::env::var_os("HOME") {
             PathBuf::from(home).join("Library/Application Support/dkb")
         } else {
@@ -69,8 +69,12 @@ impl Config {
         }
     }
 
+    pub fn default_data_dir() -> PathBuf {
+        Self::config_dir().join("data")
+    }
+
     pub fn config_file_path() -> PathBuf {
-        Self::default_data_dir().join("config.toml")
+        Self::config_dir().join("config.toml")
     }
 
     pub fn load() -> std::io::Result<Self> {
