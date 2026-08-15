@@ -443,6 +443,17 @@ The viewer is configured in Settings (see Section 7). If set to Auto-Detect, the
 
 Daily Kanban ships with a companion CLI, `dk`, that operates on the same data directory as the GUI. It is useful for quick edits from a terminal, scripting, and use over SSH. The GUI and CLI can be used interchangeably on the same board — they share `config.toml` and `board_state.json`.
 
+### Installing the `dk` command
+
+Open **Settings** (`⌘ ,`) and scroll to the **CLI Tool** section. Click **Install dk command** to create a symlink from `~/.local/bin/dk` to the `dk` binary bundled inside the app. Ensure `~/.local/bin` is in your shell's `PATH` (add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc` or `~/.bashrc` if needed).
+
+After installing, verify with:
+
+```
+which dk
+dk ls
+```
+
 The CLI keeps a small state file, `cli_state.json`, in the data directory. This records the **current item** (the last item picked, created, or moved) and the **last list** (the order of items shown by the most recent `dk list`). Several commands refer back to these to resolve shorthand selectors like `3` or `yesterday/1`.
 
 ### Commands at a glance

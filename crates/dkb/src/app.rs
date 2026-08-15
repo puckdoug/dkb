@@ -144,6 +144,7 @@ pub struct KanbanView {
     pub context_menu: Option<ContextMenuState>,
     pub language_dropdown_open: bool,
     pub font_dropdown_open: bool,
+    pub cli_install_status: Option<bool>,
 }
 
 impl KanbanView {
@@ -163,6 +164,7 @@ impl KanbanView {
             context_menu: None,
             language_dropdown_open: false,
             font_dropdown_open: false,
+            cli_install_status: None,
         }
     }
 
@@ -476,6 +478,61 @@ impl KanbanView {
         self.context_menu = None;
         self.current_screen = Screen::Settings;
         cx.notify();
+    }
+
+    fn install_cli_symlink(&mut self, cx: &mut Context<Self>) {
+        let result = self.do_install_cli_symlink();
+        match &result {
+            Ok(()) => {
+                self.cli_install_status = Some(true);
+            }
+            Err(e) => {
+                eprintln!("Failed to install dk symlink: {e}");
+                self.cli_install_status = Some(false);
+            }
+        }
+        cx.notify();
+    }
+
+    fn do_install_cli_symlink(&self) -> std::io::Result<()> {
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| std::io::Error::other(format!("cannot find current executable: {e}")))?
+            .parent()
+            .ok_or_else(|| std::io::Error::other("cannot determine executable directory"))?
+            .to_path_buf();
+
+        let dk_binary = exe_dir.join("dk");
+        if !dk_binary.exists() {
+            return Err(std::io::Error::other(format!(
+                "dk binary not found at {}",
+                dk_binary.display()
+            )));
+        }
+
+        let home = std::env::var_os("HOME")
+            .ok_or_else(|| std::io::Error::other("HOME not set"))?;
+        let local_bin = std::path::PathBuf::from(home).join(".local/bin");
+        std::fs::create_dir_all(&local_bin)?;
+
+        let symlink_path = local_bin.join("dk");
+        if symlink_path.exists() || symlink_path.is_symlink() {
+            std::fs::remove_file(&symlink_path)?;
+        }
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&dk_binary, &symlink_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn is_cli_installed(&self) -> bool {
+        let Some(home) = std::env::var_os("HOME") else {
+            return false;
+        };
+        let symlink_path = std::path::PathBuf::from(home).join(".local/bin/dk");
+        symlink_path.exists() || symlink_path.is_symlink()
     }
 
     pub fn on_open_new_main_window(&mut self, _: &OpenNewMainWindow, _window: &mut Window, cx: &mut Context<Self>) {
@@ -2015,6 +2072,61 @@ impl KanbanView {
                             .text_color(theme.text_secondary)
                             .child(data_dir_display),
                     ),
+            )
+            // CLI Tool Installation
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_primary)
+                            .child(crate::i18n::t("settings.cli_tool", self.config.language)),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme.text_secondary)
+                            .child(crate::i18n::t("settings.cli_description", self.config.language)),
+                    )
+                    .child({
+                        let is_installed = self.is_cli_installed();
+                        let status_label = match (is_installed, self.cli_install_status) {
+                            (true, _) => crate::i18n::t("settings.cli_installed", self.config.language).to_string(),
+                            (false, Some(true)) => crate::i18n::t("settings.cli_installed", self.config.language).to_string(),
+                            (false, Some(false)) => crate::i18n::t("settings.cli_install_error", self.config.language).to_string(),
+                            (false, None) => crate::i18n::t("settings.cli_install_button", self.config.language).to_string(),
+                        };
+                        let button_bg = if is_installed || self.cli_install_status == Some(true) {
+                            theme.bg_column
+                        } else {
+                            theme.accent
+                        };
+                        let button_text_color = if is_installed || self.cli_install_status == Some(true) {
+                            theme.text_secondary
+                        } else {
+                            rgb(0xffffff)
+                        };
+                        let show_pointer = !(is_installed || self.cli_install_status == Some(true));
+                        div()
+                            .px(px(12.))
+                            .py(px(6.))
+                            .rounded(px(4.))
+                            .bg(button_bg)
+                            .text_color(button_text_color)
+                            .text_xs()
+                            .map(|d| if show_pointer { d.cursor_pointer() } else { d })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.install_cli_symlink(cx);
+                                }),
+                            )
+                            .child(status_label)
+                    }),
             )
     }
 

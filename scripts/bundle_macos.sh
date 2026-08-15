@@ -18,9 +18,11 @@ echo "==> Creating macOS App Bundle structure..."
 rm -rf "${APP_DIR}"
 mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
-echo "==> Copying executable binary..."
+echo "==> Copying executable binaries..."
 cp "${ROOT_DIR}/target/release/dkb" "${MACOS_DIR}/dkb"
 chmod +x "${MACOS_DIR}/dkb"
+cp "${ROOT_DIR}/target/release/dk" "${MACOS_DIR}/dk"
+chmod +x "${MACOS_DIR}/dk"
 
 echo "==> Copying Info.plist..."
 cp "${ROOT_DIR}/resources/Info.plist" "${CONTENTS_DIR}/Info.plist"
