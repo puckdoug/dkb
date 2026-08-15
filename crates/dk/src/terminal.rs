@@ -14,11 +14,8 @@ pub fn format_list_line(
     index_col_width: usize,
     total_width: usize,
 ) -> String {
-    let prefix = if is_current {
-        "* ".to_string()
-    } else {
-        format!("{index:>index_col_width$} ")
-    };
+    let marker = if is_current { '*' } else { ' ' };
+    let prefix = format!("{marker} {index:>index_col_width$} ");
     let available = total_width
         .saturating_sub(prefix.chars().count())
         .saturating_sub(1);

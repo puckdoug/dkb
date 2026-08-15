@@ -31,8 +31,8 @@ fn test_render_list_basic() {
     let i2 = Item::new("Second task");
     let items = vec![i1.clone(), i2.clone()];
     let out = render_list(&items, Some(i1.id), 80);
-    assert!(out.contains("* First task"));
-    assert!(out.contains("1 Second task"));
+    assert!(out.contains("* 0 First task"));
+    assert!(out.contains("  1 Second task"));
 }
 
 #[test]
@@ -40,6 +40,6 @@ fn test_render_list_no_current() {
     let i1 = Item::new("Only task");
     let items = vec![i1];
     let out = render_list(&items, None, 80);
-    assert!(out.contains("0 Only task"));
+    assert!(out.contains("  0 Only task"));
     assert!(!out.contains('*'));
 }
