@@ -340,10 +340,6 @@ impl ItemEditor {
     }
 
     pub fn on_escape(&mut self, _: &EditorEscape, window: &mut Window, cx: &mut Context<Self>) {
-        if self.subitem_prompt_open {
-            self.cancel_subitem_prompt(cx);
-            return;
-        }
         if self.config.vi_mode {
             let action = self.vi_state.handle_key("escape", &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -1027,16 +1023,22 @@ impl Render for ItemEditor {
                 if this.subitem_prompt_open {
                     if key == "enter" || key == "Enter" || key == "\n" || key == "\r" {
                         this.confirm_subitem_prompt(window, cx);
+                        return;
                     } else if key == "escape" || key == "Esc" || key == "Escape" || key == "\x1b" {
-                        this.cancel_subitem_prompt(cx);
+                        // Esc must NOT close the prompt — fall through to the vi
+                        // handler below so the user can switch modes.
                     } else if key == "backspace" || key == "Backspace" || key == "\x08" || key == "\x7f" {
                         this.subitem_prompt_text.pop();
                         cx.notify();
+                        return;
                     } else if !event.keystroke.modifiers.control && !event.keystroke.modifiers.alt && key.chars().count() == 1 {
                         this.subitem_prompt_text.push_str(key);
                         cx.notify();
+                        return;
+                    } else {
+                        return;
                     }
-                    return;
+                    // For Esc, fall through to the vi handler below.
                 }
 
                 if (key == "escape" || key == "Esc" || key == "Escape" || key == "\x1b")

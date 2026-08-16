@@ -910,6 +910,53 @@ fn test_editor_breadcrumb_titles_cached(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+fn test_editor_escape_does_not_close_subitem_prompt_in_vi_mode(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: true,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nBody text");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                // Enter insert mode
+                editor.vi_state.mode = ViMode::Insert;
+                editor.state.move_to(editor.content().len());
+
+                // Open the subitem prompt (no selection)
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.subitem_prompt_open);
+
+                // Press Esc — should enter vi Normal mode, NOT close the prompt
+                editor.on_escape(&dkb::editor::EditorEscape, window, cx);
+                assert_eq!(editor.vi_state.mode, ViMode::Normal);
+                // Prompt must still be open
+                assert!(editor.subitem_prompt_open);
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn test_editor_multiline_blank_line_navigation(cx: &mut gpui::TestAppContext) {
     let window = cx.add_window(|_window, cx| KanbanView::new(cx));
 
