@@ -576,6 +576,9 @@ impl EntityInputHandler for ItemEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode {
             let action = self.vi_state.handle_key(new_text, &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -602,6 +605,9 @@ impl EntityInputHandler for ItemEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.subitem_prompt_open {
+            return;
+        }
         if self.config.vi_mode {
             let action = self.vi_state.handle_key(new_text, &mut self.state);
             self.process_vi_action(&action, window, cx);
@@ -1031,9 +1037,23 @@ impl Render for ItemEditor {
                         this.subitem_prompt_text.pop();
                         cx.notify();
                         return;
-                    } else if !event.keystroke.modifiers.control && !event.keystroke.modifiers.alt && key.chars().count() == 1 {
-                        this.subitem_prompt_text.push_str(key);
-                        cx.notify();
+                    } else if !event.keystroke.modifiers.control && !event.keystroke.modifiers.alt {
+                        // Handle space and shift-modified single-char keys (uppercase)
+                        let ch = if key == "space" || key == "Space" {
+                            Some(' ')
+                        } else if key.chars().count() == 1 {
+                            let mut ch = key.chars().next().unwrap();
+                            if event.keystroke.modifiers.shift {
+                                ch = ch.to_ascii_uppercase();
+                            }
+                            Some(ch)
+                        } else {
+                            None
+                        };
+                        if let Some(ch) = ch {
+                            this.subitem_prompt_text.push(ch);
+                            cx.notify();
+                        }
                         return;
                     } else {
                         return;

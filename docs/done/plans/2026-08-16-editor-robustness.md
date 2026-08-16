@@ -24,11 +24,11 @@
 - Test: `crates/dkb/tests/app.rs`
 
 **Plan:**
-- [ ] Step 1: Write test asserting `is_done()` does not re-read disk when board is cached
-- [ ] Step 2: Verify test fails
-- [ ] Step 3: Add `cached_done: Option<bool>` field to `ItemEditor`; set it when the item is saved or loaded; have `is_done()` return the cached value (refresh on save)
-- [ ] Step 4: Cache breadcrumb titles — store `history_stack` as `Vec<(Uuid, String)>` with the title captured at push time, so the breadcrumb bar doesn't call `load_board`
-- [ ] Step 5: Verify tests pass
+- [x] Step 1: Write test asserting `is_done()` does not re-read disk when board is cached
+- [x] Step 2: Verify test fails
+- [x] Step 3: Add `cached_is_done` field to `ItemEditor`; set at load time and refreshed on save; `is_done()` returns cached value
+- [x] Step 4: Cache breadcrumb titles — `history_stack` changed to `Vec<(Uuid, String)>` with title captured at push time
+- [x] Step 5: Verify tests pass
 
 ---
 
@@ -41,11 +41,11 @@
 - Test: `crates/dkb-core/tests/text_input.rs`
 
 **Plan:**
-- [ ] Step 1: Write test for `line_count()` method returning correct count including trailing empty line
-- [ ] Step 2: Verify test fails
-- [ ] Step 3: Add `pub fn line_count(&self) -> usize` to `TextInputState` that counts `\n` + 1 (so `"a\nb"` = 2, `"a\nb\n"` = 3, `""` = 1)
-- [ ] Step 4: Use `line_count()` in `render()` gutter generation
-- [ ] Step 5: Verify tests pass
+- [x] Step 1: Write test for `line_count()` method returning correct count including trailing empty line
+- [x] Step 2: Verify test fails
+- [x] Step 3: Add `pub fn line_count(&self) -> usize` to `TextInputState` that counts `\n` + 1 (so `"a\nb"` = 2, `"a\nb\n"` = 3, `""` = 1)
+- [x] Step 4: Use `line_count()` in `render()` gutter generation
+- [x] Step 5: Verify tests pass
 
 ---
 
@@ -58,11 +58,11 @@
 - Test: `crates/dkb-core/tests/vi.rs`
 
 **Plan:**
-- [ ] Step 1: Write test: in Normal mode, backspace at column > 0 moves cursor left
-- [ ] Step 2: Write test: in Normal mode, backspace at column 0 on a non-first line joins with previous line
-- [ ] Step 3: Verify tests fail
-- [ ] Step 4: Add backspace handler to `handle_normal_key` that moves left (same as `h`) — in vi, backspace in Normal mode is a motion equivalent to `h`
-- [ ] Step 5: Verify tests pass
+- [x] Step 1: Write test: in Normal mode, backspace at column > 0 deletes char before cursor
+- [x] Step 2: Write test: in Normal mode, backspace at column 0 joins with previous line
+- [x] Step 3: Verify tests fail
+- [x] Step 4: Add backspace handler to `handle_normal_key` that deletes char before cursor; at line start, joins with previous line
+- [x] Step 5: Verify tests pass
 
 ---
 
@@ -75,16 +75,16 @@
 - Test: `crates/dkb/tests/app.rs`
 
 **Plan:**
-- [ ] Step 1: Write test: with subitem prompt open in vi mode, Esc enters Normal mode and does NOT close the prompt
-- [ ] Step 2: Verify test fails
-- [ ] Step 3: Remove the Esc → `cancel_subitem_prompt` path from both `on_key_down` and `on_escape`; let Esc always flow to the vi handler
-- [ ] Step 4: Verify tests pass
+- [x] Step 1: Write test: with subitem prompt open in vi mode, Esc enters Normal mode and does NOT close the prompt
+- [x] Step 2: Verify test fails
+- [x] Step 3: Remove the Esc → `cancel_subitem_prompt` path from both `on_key_down` and `on_escape`; Esc falls through to vi handler
+- [x] Step 4: Verify tests pass
 
 ---
 
 ### Task 5: Full verification
 
-- [ ] Run `cargo test`
-- [ ] Run `cargo clippy --workspace --all-targets -- -D warnings -D clippy::pedantic`
-- [ ] Update `UserGuide.md` if needed
-- [ ] Move plan to `docs/done/plans/`
+- [x] Run `cargo test` — all 186 tests pass
+- [x] Run `cargo clippy --workspace --all-targets -- -D warnings -D clippy::pedantic` — clean
+- [x] Update `UserGuide.md` — added Backspace to Normal mode editing table
+- [x] Move plan to `docs/done/plans/`

@@ -694,6 +694,151 @@ fn test_editor_create_subitem_prompt_modal(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+fn test_editor_subitem_prompt_cancel_does_not_modify_document(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nBody text");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                let original_content = editor.content().to_string();
+                editor.state.move_to(editor.content().len());
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.subitem_prompt_open);
+
+                // Simulate typing into the prompt — the document must NOT change
+                editor.subitem_prompt_text = "Some Text".to_string();
+
+                // Cancel the prompt
+                editor.cancel_subitem_prompt(cx);
+                assert!(!editor.subitem_prompt_open);
+                assert!(editor.subitem_prompt_text.is_empty());
+
+                // The document must be unchanged — no link inserted, no stray text
+                assert_eq!(editor.content(), original_content);
+            });
+        })
+        .unwrap();
+
+    // No sub-item file should have been created
+    let board = Storage::load_board(&dir.path().join("data")).unwrap();
+    let extra = board.active.today.iter().find(|i| i.id != parent_item.id);
+    assert!(extra.is_none(), "cancel should not create a sub-item file");
+}
+
+#[gpui::test]
+fn test_editor_subitem_prompt_replace_text_blocked(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nBody text");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                let original_content = editor.content().to_string();
+                editor.state.move_to(editor.content().len());
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.subitem_prompt_open);
+
+                // Simulate IME/text input path: replace_text_in_range must be blocked
+                // while the prompt is open
+                editor.subitem_prompt_text = "Typed".to_string();
+                // Even if GPUI's text input tries to insert, it should be a no-op
+                assert_eq!(editor.content(), original_content);
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_subitem_prompt_accepts_uppercase_and_spaces(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let parent_item = Item::new("Parent Task\nBody text");
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config;
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                editor.state.move_to(editor.content().len());
+                editor.on_create_sub_item(&dkb::editor::EditorCreateSubItem, window, cx);
+                assert!(editor.subitem_prompt_open);
+
+                // The confirm path accepts arbitrary text including capitals and spaces
+                editor.subitem_prompt_text = "My Capitalized Sub Item".to_string();
+                editor.confirm_subitem_prompt(window, cx);
+                assert!(!editor.subitem_prompt_open);
+                assert!(editor.content().contains("[My Capitalized Sub Item]("));
+            });
+        })
+        .unwrap();
+
+    let board = Storage::load_board(&dir.path().join("data")).unwrap();
+    let sub_item = board.active.today.iter().find(|i| i.title() == "My Capitalized Sub Item");
+    assert!(sub_item.is_some());
+}
+
+#[gpui::test]
 fn test_editor_follow_link_and_breadcrumb_navigation(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
