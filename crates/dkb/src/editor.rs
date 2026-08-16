@@ -70,7 +70,8 @@ pub struct ItemEditor {
     pub subitem_prompt_open: bool,
     pub subitem_prompt_text: String,
     pub context_menu_pos: Option<Point<Pixels>>,
-    pub history_stack: Vec<Uuid>,
+    pub history_stack: Vec<(Uuid, String)>,
+    pub cached_is_done: bool,
 }
 
 impl gpui::EventEmitter<EditorEvent> for ItemEditor {}
@@ -106,6 +107,7 @@ impl ItemEditor {
             subitem_prompt_text: String::new(),
             context_menu_pos: None,
             history_stack: Vec::new(),
+            cached_is_done: false,
         }
     }
 
@@ -156,6 +158,7 @@ impl ItemEditor {
             if Storage::write_item(&self.config.data_dir, &item, &location).is_ok() {
                 self.editing_item_id = Some(item.id);
                 self.is_new = false;
+                self.cached_is_done = false;
             }
         } else if let Some(id) = self.editing_item_id {
             let locations = [
@@ -190,6 +193,7 @@ impl ItemEditor {
                 },
             };
             let _ = Storage::write_item(&self.config.data_dir, &item, &location);
+            self.cached_is_done = matches!(location, Location::Done);
         }
         cx.emit(EditorEvent::Save);
         cx.notify();
@@ -452,7 +456,8 @@ impl ItemEditor {
         if let Some(span) = find_link_at_offset(self.state.content(), offset) {
             self.on_save(&SaveEditor, window, cx);
             if let Some(curr_id) = self.editing_item_id {
-                self.history_stack.push(curr_id);
+                let title = Item::extract_title(self.state.content());
+                self.history_stack.push((curr_id, title));
             }
             if let Ok(board) = Storage::load_board(&self.config.data_dir)
                 && let Some(target_item) = board.find_item(&span.target_id)
@@ -460,6 +465,7 @@ impl ItemEditor {
                 self.state = TextInputState::new(&target_item.body);
                 self.editing_item_id = Some(span.target_id);
                 self.is_new = false;
+                self.cached_is_done = matches!(board.find_item_location(&span.target_id), Some(Location::Done));
                 self.context_menu_pos = None;
                 cx.notify();
             }
@@ -472,7 +478,7 @@ impl ItemEditor {
     }
 
     pub fn navigate_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(parent_id) = self.history_stack.pop() {
+        if let Some((parent_id, _title)) = self.history_stack.pop() {
             self.on_save(&SaveEditor, window, cx);
             if let Ok(board) = Storage::load_board(&self.config.data_dir)
                 && let Some(item) = board.find_item(&parent_id)
@@ -480,6 +486,7 @@ impl ItemEditor {
                 self.state = TextInputState::new(&item.body);
                 self.editing_item_id = Some(parent_id);
                 self.is_new = false;
+                self.cached_is_done = matches!(board.find_item_location(&parent_id), Some(Location::Done));
                 self.context_menu_pos = None;
                 cx.notify();
             }
@@ -493,7 +500,7 @@ impl ItemEditor {
     pub fn navigate_to_history_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if index < self.history_stack.len() {
             self.on_save(&SaveEditor, window, cx);
-            let target_id = self.history_stack[index];
+            let (target_id, _title) = self.history_stack[index].clone();
             self.history_stack.truncate(index);
             if let Ok(board) = Storage::load_board(&self.config.data_dir)
                 && let Some(item) = board.find_item(&target_id)
@@ -501,6 +508,7 @@ impl ItemEditor {
                 self.state = TextInputState::new(&item.body);
                 self.editing_item_id = Some(target_id);
                 self.is_new = false;
+                self.cached_is_done = matches!(board.find_item_location(&target_id), Some(Location::Done));
                 self.context_menu_pos = None;
                 cx.notify();
             }
@@ -508,13 +516,18 @@ impl ItemEditor {
     }
 
     pub fn is_done(&self) -> bool {
+        self.cached_is_done
+    }
+
+    pub fn refresh_done_status(&mut self) {
         if let Some(id) = self.editing_item_id
             && let Ok(board) = Storage::load_board(&self.config.data_dir)
             && let Some(loc) = board.find_item_location(&id)
         {
-            return matches!(loc, Location::Done);
+            self.cached_is_done = matches!(loc, Location::Done);
+        } else {
+            self.cached_is_done = false;
         }
-        false
     }
 }
 
@@ -1086,27 +1099,22 @@ impl Render for ItemEditor {
                     .gap(px(6.));
 
                 if !self.history_stack.is_empty() {
-                    if let Ok(board) = Storage::load_board(&self.config.data_dir) {
-                        for (idx, &item_id) in self.history_stack.iter().enumerate() {
-                            let title = board
-                                .find_item(&item_id)
-                                .map(Item::title)
-                                .unwrap_or_else(|| "Parent Item".to_string());
-                            crumbs = crumbs
-                                .child(
-                                    div()
-                                        .cursor_pointer()
-                                        .text_color(theme.accent)
-                                        .child(title)
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(move |this, _, window, cx| {
-                                                this.navigate_to_history_index(idx, window, cx);
-                                            }),
-                                        ),
-                                )
-                                .child(div().text_color(theme.text_secondary).child(">"));
-                        }
+                    for (idx, (item_id, title)) in self.history_stack.iter().enumerate() {
+                        let _ = item_id;
+                        crumbs = crumbs
+                            .child(
+                                div()
+                                    .cursor_pointer()
+                                    .text_color(theme.accent)
+                                    .child(title.clone())
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |this, _, window, cx| {
+                                            this.navigate_to_history_index(idx, window, cx);
+                                        }),
+                                    ),
+                            )
+                            .child(div().text_color(theme.text_secondary).child(">"));
                     }
                     crumbs = crumbs.child(
                         div()

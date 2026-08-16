@@ -738,7 +738,7 @@ fn test_editor_follow_link_and_breadcrumb_navigation(cx: &mut gpui::TestAppConte
                 editor.on_follow_link(&dkb::editor::EditorFollowLink, window, cx);
                 assert_eq!(editor.editing_item_id, Some(child_item.id));
                 assert_eq!(editor.content(), "Child Subtask\nChild content");
-                assert_eq!(editor.history_stack, vec![parent_item.id]);
+                assert_eq!(editor.history_stack, vec![(parent_item.id, "Parent Item".to_string())]);
             });
 
             // Navigate back
@@ -781,6 +781,130 @@ fn test_editor_done_badge(cx: &mut gpui::TestAppContext) {
             let editing = view.editing.as_ref().unwrap();
             let editor = editing.editor.read(cx);
             assert!(editor.is_done());
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_is_done_cached_after_load(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let done_item = Item::new("Finished Task");
+    Storage::write_item(&config.data_dir, &done_item, &Location::Done).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config.clone();
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    window
+        .update(cx, |view, _window, cx| {
+            view.open_editor_for_item(done_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, _cx| {
+                // is_done should be true at load time
+                assert!(editor.is_done());
+            });
+        })
+        .unwrap();
+
+    // Delete the item from disk entirely — is_done must still return true (cached)
+    let done_path = dir.path().join("data/done").join(format!("{}.md", done_item.id));
+    std::fs::remove_file(&done_path).unwrap();
+
+    window
+        .update(cx, |view, _window, cx| {
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, _cx| {
+                // Even though the file is gone from disk, the cached value is still true
+                assert!(editor.is_done());
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn test_editor_breadcrumb_titles_cached(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().join("data").to_path_buf(),
+        vi_mode: false,
+        line_numbers: false,
+        theme_mode: ThemeMode::System,
+        language: Language::EnUs,
+        markdown_viewer: dkb::viewer::ViewerPreference::Auto,
+        font_family: "Menlo".to_string(),
+    };
+    Storage::init(&config.data_dir).unwrap();
+
+    let child_item = Item::new("Child Subtask\nChild content");
+    Storage::write_item(&config.data_dir, &child_item, &Location::Active(Category::Today)).unwrap();
+
+    let parent_body = format!(
+        "Parent Item\nLink to [{}]({}.md) child task",
+        child_item.title(),
+        child_item.id
+    );
+    let parent_item = Item {
+        id: uuid::Uuid::new_v4(),
+        body: parent_body,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        completed_at: None,
+    };
+    Storage::write_item(&config.data_dir, &parent_item, &Location::Active(Category::Today)).unwrap();
+
+    let window = cx.add_window(|_window, cx| {
+        let mut view = KanbanView::new(cx);
+        view.config = config.clone();
+        view.board = Storage::load_board(&view.config.data_dir).unwrap();
+        view
+    });
+
+    // Follow the link, which pushes parent onto the history stack
+    window
+        .update(cx, |view, window, cx| {
+            view.open_editor_for_item(parent_item.id, cx);
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, cx| {
+                editor.state.move_to(25);
+                editor.on_follow_link(&dkb::editor::EditorFollowLink, window, cx);
+                assert_eq!(editor.editing_item_id, Some(child_item.id));
+                // The history stack should have the parent with its cached title
+                assert_eq!(editor.history_stack.len(), 1);
+                let (_, title) = &editor.history_stack[0];
+                assert_eq!(title, "Parent Item");
+            });
+        })
+        .unwrap();
+
+    // Delete parent from disk — the breadcrumb title should still be available (cached)
+    let parent_path = dir
+        .path()
+        .join("data/active/today")
+        .join(format!("{}.md", parent_item.id));
+    std::fs::remove_file(&parent_path).unwrap();
+
+    window
+        .update(cx, |view, _window, cx| {
+            let editing = view.editing.as_ref().unwrap();
+            editing.editor.update(cx, |editor, _cx| {
+                // Title is still available from cache, not from disk
+                let (_, title) = &editor.history_stack[0];
+                assert_eq!(title, "Parent Item");
+            });
         })
         .unwrap();
 }

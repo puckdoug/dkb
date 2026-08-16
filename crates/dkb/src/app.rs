@@ -1028,7 +1028,15 @@ impl KanbanView {
     pub fn open_editor_for_item(&mut self, id: Uuid, cx: &mut Context<Self>) {
         self.context_menu = None;
         let body = self.board.find_item(&id).map(|i| i.body.clone()).unwrap_or_default();
-        let editor = cx.new(|cx| ItemEditor::new(cx, &body, Some(id), false, self.config.clone(), false));
+        let is_done = self
+            .board
+            .find_item_location(&id)
+            .is_some_and(|loc| matches!(loc, Location::Done));
+        let editor = cx.new(|cx| {
+            let mut ed = ItemEditor::new(cx, &body, Some(id), false, self.config.clone(), false);
+            ed.cached_is_done = is_done;
+            ed
+        });
         let subscription = cx.subscribe(&editor, |this, _editor, event: &EditorEvent, cx| {
             match event {
                 EditorEvent::Close => {
