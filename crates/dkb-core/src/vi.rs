@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use crate::text_input::TextInputState;
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchDirection {
@@ -399,6 +400,25 @@ impl ViState {
             self.pending_g = false;
             self.pending_text_object = None;
             self.replace_pending = false;
+            return ViActionResult::Handled;
+        }
+
+        // Backspace: delete the character before the cursor (like X), and if at
+        // the start of a line, delete the newline to join with the previous line.
+        if Self::is_backspace(key) {
+            let cur = state.cursor_offset();
+            let content = state.content();
+            let line_start = find_line_start(content, cur);
+            if cur > line_start {
+                // Delete the character before the cursor
+                let prev = content[..cur].grapheme_indices(true).rev().next().map(|(i, _)| i).unwrap_or(0);
+                state.replace_range(prev..cur, "");
+                state.move_to(prev);
+            } else if line_start > 0 {
+                // At the start of a line (not the first): delete the newline to join lines
+                state.replace_range(line_start - 1..line_start, "");
+                state.move_to(line_start - 1);
+            }
             return ViActionResult::Handled;
         }
 

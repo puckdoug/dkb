@@ -626,3 +626,40 @@ fn test_vi_escape_variants() {
         assert_eq!(vi.mode, ViMode::Normal);
     }
 }
+
+#[test]
+fn test_vi_normal_backspace_deletes_char() {
+    let mut state = TextInputState::new("hello");
+    let mut vi = ViState::new();
+    state.move_to(3); // cursor on second 'l'
+    assert_eq!(state.cursor_offset(), 3);
+    let result = vi.handle_key("backspace", &mut state);
+    assert_eq!(result, ViActionResult::Handled);
+    assert_eq!(state.content(), "helo");
+    assert_eq!(state.cursor_offset(), 2); // cursor moved left after deleting 'l'
+}
+
+#[test]
+fn test_vi_normal_backspace_at_line_start_stays() {
+    let mut state = TextInputState::new("hello world");
+    let mut vi = ViState::new();
+    // cursor at start of line (offset 0) — backspace should not move past line start
+    state.move_to(0);
+    let result = vi.handle_key("backspace", &mut state);
+    assert_eq!(result, ViActionResult::Handled);
+    assert_eq!(state.cursor_offset(), 0);
+}
+
+#[test]
+fn test_vi_normal_backspace_multiline_joins_lines() {
+    let mut state = TextInputState::new("line one\nline two");
+    let mut vi = ViState::new();
+    // Move to start of second line
+    state.move_to(9); // offset 9 is start of "line two"
+    assert_eq!(state.cursor_offset(), 9);
+    let result = vi.handle_key("backspace", &mut state);
+    assert_eq!(result, ViActionResult::Handled);
+    // Backspace at line start should delete the newline, joining the lines
+    assert_eq!(state.content(), "line oneline two");
+    assert_eq!(state.cursor_offset(), 8); // cursor at the join point
+}
