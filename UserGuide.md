@@ -767,6 +767,7 @@ Most commands accept a count prefix. For example, `3j` moves down 3 lines, `2dd`
 |-----|--------|
 | `x` | Delete character under cursor (count supported) |
 | `X` | Delete character before cursor (count supported) |
+| `Backspace` | Delete character before cursor; at line start, join with previous line |
 | `r<char>` | Replace character under cursor with `<char>` (count replaces N chars) |
 | `~` | Toggle case of character under cursor (count supported) |
 | `J` | Join next line to current (count joins N lines) |

@@ -411,7 +411,7 @@ impl ViState {
             let line_start = find_line_start(content, cur);
             if cur > line_start {
                 // Delete the character before the cursor
-                let prev = content[..cur].grapheme_indices(true).rev().next().map(|(i, _)| i).unwrap_or(0);
+                let prev = content[..cur].grapheme_indices(true).next_back().map_or(0, |(i, _)| i);
                 state.replace_range(prev..cur, "");
                 state.move_to(prev);
             } else if line_start > 0 {
