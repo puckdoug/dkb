@@ -272,6 +272,38 @@ fn test_utf16_offset_multibyte() {
     assert_eq!(state.offset_from_utf16(1), 3);
 }
 
+// -- Line counting --
+
+#[test]
+fn test_line_count_single_line() {
+    let state = TextInputState::new("hello");
+    assert_eq!(state.line_count(), 1);
+}
+
+#[test]
+fn test_line_count_multiline_no_trailing_newline() {
+    let state = TextInputState::new("line one\nline two");
+    assert_eq!(state.line_count(), 2);
+}
+
+#[test]
+fn test_line_count_multiline_with_trailing_newline() {
+    let state = TextInputState::new("line one\nline two\n");
+    assert_eq!(state.line_count(), 3);
+}
+
+#[test]
+fn test_line_count_empty() {
+    let state = TextInputState::new("");
+    assert_eq!(state.line_count(), 1);
+}
+
+#[test]
+fn test_line_count_only_newlines() {
+    let state = TextInputState::new("\n\n");
+    assert_eq!(state.line_count(), 3);
+}
+
 // -- Word boundaries --
 
 #[test]

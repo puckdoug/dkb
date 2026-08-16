@@ -31,6 +31,10 @@ impl TextInputState {
         &self.content
     }
 
+    pub fn line_count(&self) -> usize {
+        self.content.matches('\n').count() + 1
+    }
+
     pub fn cursor_offset(&self) -> usize {
         if self.selection_reversed {
             self.selected_range.start

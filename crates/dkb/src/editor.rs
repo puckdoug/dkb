@@ -971,8 +971,7 @@ impl Render for ItemEditor {
         let show_line_numbers = self.config.line_numbers;
         let show_vi_status = self.config.vi_mode;
 
-        let content = self.state.content();
-        let line_count = content.lines().count().max(1);
+        let line_count = self.state.line_count();
 
         let gutter = if show_line_numbers {
             let mut numbers_col = div()
